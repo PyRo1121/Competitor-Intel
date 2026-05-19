@@ -3,13 +3,13 @@ Auto-Promotion System
 Moves high-scoring candidates from company_candidates into the main companies table.
 """
 
-import sqlite3
-import re
-from pathlib import Path
-from datetime import datetime
-
-from db.connection import get_conn, DB_PATH
 import logging
+import re
+import sqlite3
+from datetime import datetime, timezone
+
+from db.connection import get_conn
+
 logger = logging.getLogger(__name__)
 PROMOTION_THRESHOLD = 0.65  # 65%+ score gets promoted
 
@@ -40,7 +40,10 @@ def auto_promote_candidates():
                 INSERT INTO companies (name, slug, description, industry, status, first_seen, last_updated)
                 VALUES (?, ?, ?, ?, 'active', ?, ?)
             """, (name, slug, description or f"Auto-promoted from {source}", 
-                  None, datetime.now().isoformat(), datetime.now().isoformat()))
+                  None,
+                  datetime.now(timezone.utc).isoformat(),
+                  datetime.now(timezone.utc).isoformat(),
+              ))
             
             # Mark as promoted
             cursor.execute("""
@@ -60,6 +63,10 @@ def auto_promote_candidates():
     
     logger.info("Operation complete.")
     return promoted
+
+def run() -> int:
+    return int(auto_promote_candidates() or 0)
+
 
 if __name__ == "__main__":
     auto_promote_candidates()
