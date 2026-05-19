@@ -1,16 +1,12 @@
-"""
-Ingestion Layer - Handles inserting data from all sources into SQLite
-Optimized for free-tier sources + Grok native X access
-"""
+"""SQLite ingest helpers for collectors (deduped raw_signals and legacy x_posts)."""
 
-import sqlite3
-import json
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-
-from db.connection import get_conn, DB_PATH
 import hashlib
+import json
+import sqlite3
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from db.connection import get_conn
 
 
 def url_dedup_key(url: str, nbytes: int = 16) -> str:
@@ -68,16 +64,6 @@ def get_company_id(name_or_slug: str) -> Optional[int]:
     conn.close()
     return row[0] if row else None
 
-def insert_raw_signal(company_id: Optional[int], source: str, signal_type: str, data: Dict[str, Any]):
-    """Insert raw flexible signal."""
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO raw_signals (company_id, source, signal_type, data_json, processed)
-        VALUES (?, ?, ?, ?, 0)
-    """, (company_id, source, signal_type, json.dumps(data)))
-    conn.commit()
-    conn.close()
 
 def insert_x_post(company_name: str, post_data: Dict[str, Any]) -> bool:
     """Insert X post (from Grok native access)."""
