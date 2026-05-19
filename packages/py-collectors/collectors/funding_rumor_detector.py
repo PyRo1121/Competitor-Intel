@@ -4,27 +4,17 @@ Extracts potential funding signals from raw text using regex patterns.
 Creates structured funding_events when confidence threshold is met.
 """
 
-import re
 import json
+import logging
+import re
 import sqlite3
-from datetime import datetime
-from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from db.connection import get_conn, DB_PATH
-import logging
+from db.connection import get_conn
+from db.ingest import get_company_id
+
 logger = logging.getLogger(__name__)
 
-
-
-def get_company_id(name: str) -> Optional[int]:
-    """Get company ID by name or slug."""
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM companies WHERE name = ?", (name,))
-    row = cursor.fetchone()
-    conn.close()
-    return row[0] if row else None
 
 def parse_valuation(text: str) -> Optional[Tuple[float, str]]:
     """Extract valuation from text (e.g. $3B+, $40B, 2.5 billion)."""
