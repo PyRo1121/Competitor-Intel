@@ -15,6 +15,7 @@ import scoring from "./routes/scoring";
 import alerts from "./routes/alerts";
 import jobs from "./routes/jobs";
 import discovery from "./routes/discovery";
+import dataAudit from "./routes/dataAudit";
 
 const app = new Hono();
 
@@ -44,24 +45,33 @@ app.route("/api/alerts", alerts);
 app.route("/api/jobs", jobs);
 app.route("/api/discovery", discovery);
 app.route("/api/trending", trending);
+app.route("/api/data-audit", dataAudit);
 
 app.get("/", (c) =>
   c.json({
-    name: "Competitor Intelligence API",
-    version: "2.0.0",
+    name: "Private Company Intelligence API",
+    version: "2.1.0",
     endpoints: [
       "/api/companies",
       "/api/signals",
       "/api/events",
       "/api/funding",
+      "/api/funding/claims",
+      "/api/funding/rounds/:id",
+      "/api/funding/investors",
+      "/api/funding/investors/:id",
       "/api/status",
       "/api/search",
       "/api/competitors",
       "/api/scoring",
       "/api/alerts",
       "/api/jobs",
+      "/api/jobs/claims",
+      "/api/jobs/postings/:id",
       "/api/discovery",
+      "/api/discovery/candidates",
       "/api/trending",
+      "/api/data-audit",
       "/api/health",
     ],
   })

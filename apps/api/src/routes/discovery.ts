@@ -25,6 +25,29 @@ app.get("/", (c) => {
   return c.json({ discoveries, count: discoveries.length });
 });
 
+app.get("/candidates", (c) => {
+  const db = getDB();
+  const rawLimit = Number(c.req.query("limit"));
+  const limit = Math.min(
+    Math.max(Number.isFinite(rawLimit) ? rawLimit : 25, 1),
+    100,
+  );
+
+  const candidates = db
+    .prepare(
+      `
+    SELECT id, name, score, discovery_source, status, signals, score_breakdown, last_updated
+    FROM company_candidates
+    WHERE status = 'pending'
+    ORDER BY score DESC
+    LIMIT ?
+  `,
+    )
+    .all(limit);
+
+  return c.json({ candidates, count: candidates.length, limit });
+});
+
 app.get("/github-orgs", (c) => {
   const db = getDB();
 
@@ -80,8 +103,9 @@ app.post("/add-company", async (c) => {
     }
 
     return c.json({ added: true, name, slug }, 201);
-  } catch (error: any) {
-    return c.json({ error: error.message }, 500);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Insert failed";
+    return c.json({ error: message }, 500);
   }
 });
 
