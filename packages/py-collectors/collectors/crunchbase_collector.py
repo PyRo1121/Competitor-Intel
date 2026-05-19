@@ -28,7 +28,7 @@ COMPANY_KEYWORDS = [
 
 
 def feed_urls() -> List[str]:
-    urls = [f.url for f in feeds_by_category("funding")]
+    urls = [f.url for f in feeds_by_category("general_startup")]
     if not urls:
         urls = ["https://news.crunchbase.com/feed/"]
     return urls
