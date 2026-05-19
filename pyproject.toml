@@ -48,4 +48,26 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "ARG"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m 'not enterprise'"
 asyncio_mode = "auto"
+markers = [
+    "operational: SQLite daily pipeline (default in make test)",
+    "enterprise: SQLAlchemy enterprise package (optional; make test-all)",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:competitor_intel",
+]
+
+[tool.coverage.run]
+relative_files = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+include = [
+    "packages/py-core/db/migrations.py",
+    "packages/py-core/db/connection.py",
+    "packages/py-collectors/collectors/signal_processor.py",
+    "packages/py-collectors/collectors/signal_company_resolver.py",
+    "packages/py-core/utils/http.py",
+]
