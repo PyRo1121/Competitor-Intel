@@ -1,0 +1,32 @@
+services:
+  api:
+    image: oven/bun:1
+    working_dir: /app/apps/api
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    environment:
+      CI_DB_PATH: /app/data/competitor_intel.db
+      CI_API_PORT: "3000"
+    ports:
+      - "3000:3000"
+    command: sh -c "bun install && bun run start"
+    restart: unless-stopped
+
+  worker:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    environment:
+      CI_DB_PATH: /app/data/competitor_intel.db
+      PYTHONPATH: /app/packages/py-collectors:/app/packages/py-core:/app/apps/worker:/app/apps/cli:/app/packages/py-enterprise/src
+    command: python apps/worker/daily_intel.py
+    profiles:
+      - worker
+    restart: "no"
+
+# Usage:
+#   docker compose up api              # API only
+#   docker compose --profile worker run worker   # one-shot pipeline

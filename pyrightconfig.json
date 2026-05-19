@@ -1,0 +1,12 @@
+{
+  "include": ["src", "collectors", "reports", "tests", "utils", "alembic", "*.py"],
+  "exclude": [".venv", "__pycache__", "*.egg-info"],
+  "extraPaths": ["src"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false
+}
