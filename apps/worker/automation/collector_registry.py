@@ -117,4 +117,7 @@ INTEL_CLI_COLLECTORS: dict[str, str] = {
     "angellist": "collectors/angellist_collector.py",
     "x": "collectors/x_signal_collector.py",
     "fanout": "collectors/signal_url_fanout.py",
+    "discover": "collectors/candidate_discovery.py",
+    "promote": "collectors/auto_promote.py",
+    "rank": "collectors/company_ranker.py",
 }
