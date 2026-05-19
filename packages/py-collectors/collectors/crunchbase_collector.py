@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from collectors.sources_registry import feeds_by_category
 from db.connection import get_conn
-from db.ingest import insert_raw_signal_dedup
+from db.ingest import get_company_id, insert_raw_signal_dedup
 from utils.http import fetch_text
 
 logger = logging.getLogger("crunchbase")
@@ -85,15 +85,7 @@ def store(items: List[Dict[str, Any]]) -> int:
 
     for item in items:
         companies = extract_companies(item["title"] + " " + item["description"])
-        company_id = None
-        if companies:
-            cursor.execute(
-                "SELECT id FROM companies WHERE name = ? COLLATE NOCASE",
-                (companies[0],),
-            )
-            row = cursor.fetchone()
-            if row:
-                company_id = row[0]
+        company_id = get_company_id(companies[0]) if companies else None
         url = item.get("url") or ""
         if not url:
             continue

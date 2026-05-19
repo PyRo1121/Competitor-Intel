@@ -194,7 +194,7 @@ RSS/HN ingest is **discovery-first**: high-signal items and headline entity extr
 
 No fixed “big private” watchlist is required for the firehose; optional CIKs only via `EDGAR_TRACKED_CIKS`.
 
-## 5. Signal Processor (`collectors/signal_processor.py`)
+## 5. Signal Processor (`packages/py-collectors/collectors/signal_processor.py`)
 
 Converts raw signals into structured intelligence events.
 
@@ -219,11 +219,11 @@ Loads company names, slugs, and X handles into a lookup table. Supports token-le
 
 ## 6. Scoring
 
-### 6a. Attention rank (`collectors/company_ranker.py`)
+### 6a. Attention rank (`packages/py-collectors/collectors/company_ranker.py`)
 
 **Primary ranking for “who’s hot”** — sector-agnostic, driven by the signal firehose. Run automatically in `DAILY_SEQUENTIAL` after discovery/promote. Composite 0–1 written to `companies.score` and `last_scored_at`.
 
-### 6b. VC deep score (`collectors/company_discovery.py`)
+### 6b. VC deep score (`packages/py-collectors/collectors/company_discovery.py`)
 
 Optional 12-factor model for dossier-style analysis. All factors computed from real database data. Zero placeholders.
 
@@ -257,11 +257,10 @@ Each factor produces a 0-1 score, multiplied by its weight, summed for composite
 
 ### Running Scoring
 ```python
-from collectors.company_discovery import run_discovery_scan
-run_discovery_scan()
+uv run python packages/py-collectors/collectors/company_discovery.py
 ```
 
-## 7. Momentum Detector (`collectors/momentum_detector.py`)
+## 7. Momentum Detector (`packages/py-collectors/collectors/momentum_detector.py`)
 
 Real-time trending analysis. Compares current period vs previous period for growth rate.
 
@@ -278,7 +277,7 @@ Real-time trending analysis. Compares current period vs previous period for grow
 - Media velocity: Intelligence event growth rate
 - Competitor mentions: Relationship count + co-mention signals
 
-## 8. Competitor Mapper (`collectors/competitor_mapper.py`)
+## 8. Competitor Mapper (`packages/py-collectors/collectors/competitor_mapper.py`)
 
 Auto-detects competitor relationships by analyzing co-mentions in raw signals.
 

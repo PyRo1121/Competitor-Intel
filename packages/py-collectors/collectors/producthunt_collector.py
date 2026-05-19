@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from xml.etree import ElementTree as ET
 
 from db.connection import get_conn
-from db.ingest import insert_raw_signal_dedup
+from db.ingest import get_company_id, insert_raw_signal_dedup
 from utils.http import fetch_text
 
 logger = logging.getLogger("producthunt")
@@ -86,15 +86,7 @@ def store_signals(items: List[Dict[str, Any]]) -> int:
         if not url:
             continue
         companies = extract_company_names(item["title"], item["description"])
-        company_id = None
-        if companies:
-            cursor.execute(
-                "SELECT id FROM companies WHERE name = ? COLLATE NOCASE",
-                (companies[0],),
-            )
-            row = cursor.fetchone()
-            if row:
-                company_id = row[0]
+        company_id = get_company_id(companies[0]) if companies else None
         data = {
             "title": item["title"],
             "description": item["description"],

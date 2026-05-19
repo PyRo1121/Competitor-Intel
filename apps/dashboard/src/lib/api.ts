@@ -64,6 +64,48 @@ export async function getCompanies(
 	return fetchAPI<CompaniesListResponse>(`/api/companies?${qs}`);
 }
 
+export interface DiscoveryCandidate {
+	id: number;
+	name: string;
+	score: number;
+	discovery_source?: string | null;
+	status: string;
+	signals?: number | null;
+	score_breakdown?: string | null;
+	last_updated?: string | null;
+}
+
+export interface DiscoveryCandidatesResponse {
+	candidates: DiscoveryCandidate[];
+	count: number;
+	limit: number;
+}
+
+export async function getDiscoveryCandidates(limit = 50): Promise<DiscoveryCandidatesResponse> {
+	const qs = new URLSearchParams({ limit: String(limit) });
+	return fetchAPI<DiscoveryCandidatesResponse>(`/api/discovery/candidates?${qs}`);
+}
+
+export interface ScoredCompanyRow {
+	id: number;
+	name: string;
+	slug?: string | null;
+	industry?: string | null;
+	status?: string | null;
+	score?: number | null;
+}
+
+export interface ScoringListResponse {
+	companies: ScoredCompanyRow[];
+	count: number;
+	limit: number;
+}
+
+export async function getTopScored(limit = 10): Promise<ScoringListResponse> {
+	const qs = new URLSearchParams({ limit: String(limit) });
+	return fetchAPI<ScoringListResponse>(`/api/scoring?${qs}`);
+}
+
 export async function getCompany(idOrSlug: string): Promise<CompanyDetailResponse> {
 	return fetchAPI<CompanyDetailResponse>(`/api/companies/${encodeURIComponent(idOrSlug)}`);
 }

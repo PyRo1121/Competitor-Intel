@@ -56,10 +56,14 @@ def get_company_id(name_or_slug: str) -> Optional[int]:
     """Get company ID by name or slug."""
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id FROM companies 
+    cursor.execute(
+        """
+        SELECT id FROM companies
         WHERE name = ? OR slug = ? OR x_handle = ?
-    """, (name_or_slug, name_or_slug, name_or_slug))
+           OR LOWER(name) = LOWER(?)
+        """,
+        (name_or_slug, name_or_slug, name_or_slug, name_or_slug),
+    )
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else None
