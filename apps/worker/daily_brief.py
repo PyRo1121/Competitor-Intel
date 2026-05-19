@@ -20,8 +20,9 @@ from typing import Dict, List, Optional
 logger = logging.getLogger("daily_brief")
 
 from db.connection import get_conn, DB_PATH
+from ci_paths import EXPORTS_DIR
 
-EXPORT_DIR = Path.home() / ".hermes" / "agents" / "competitor_intel" / "exports"
+EXPORT_DIR = EXPORTS_DIR
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 

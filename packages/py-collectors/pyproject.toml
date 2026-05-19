@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "competitor-intel-collectors"
+version = "2.1.0"
+description = "Operational RSS, GitHub, SEC, and enrichment collectors"
+requires-python = ">=3.11"
+dependencies = [
+    "competitor-intel-core",
+    "httpx>=0.28.1",
+    "beautifulsoup4>=4.13.4",
+    "feedparser>=6.0.11",
+    "tenacity>=9.1.0",
+    "ollama>=0.4.0",
+    "numpy>=2.2.0",
+]
+
+[tool.uv.sources]
+competitor-intel-core = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["collectors"]

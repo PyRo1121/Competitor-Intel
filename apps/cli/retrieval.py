@@ -8,14 +8,16 @@ import json
 import logging
 import sqlite3
 import sys
-from pathlib import Path
 
 from embeddings import cosine_similarity, get_embedding
 from investor_tiers import get_investor_tier
+from ci_paths import db_path, ensure_app_paths
+
+ensure_app_paths()
 
 logger = logging.getLogger("retrieval")
 
-DB_PATH = Path.home() / ".hermes" / "agents" / "competitor_intel" / "competitor_intel.db"
+DB_PATH = db_path()
 
 
 def semantic_search(query: str, top_k: int = 10):

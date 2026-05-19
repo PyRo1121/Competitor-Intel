@@ -12,10 +12,9 @@ case "$mode" in
     curl -sf "$API_URL/api/status" | jq .
     ;;
   daily)
-    export PYTHONPATH="$MONOREPO/packages/py-collectors:$MONOREPO/packages/py-core:$MONOREPO/apps/worker:$MONOREPO/apps/cli:$MONOREPO/packages/py-enterprise/src"
-    export CI_DB_PATH="${CI_DB_PATH:-$MONOREPO/data/competitor_intel.db}"
     cd "$MONOREPO"
-    python3 apps/worker/daily_intel.py
+    export CI_DB_PATH="${CI_DB_PATH:-$MONOREPO/data/competitor_intel.db}"
+    uv run python apps/worker/daily_intel.py
     ;;
   companies)
     curl -sf "$API_URL/api/companies?limit=${2:-20}" | jq .

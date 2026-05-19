@@ -30,11 +30,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger("discord_bot")
+from ci_paths import MONOREPO_ROOT, ensure_app_paths
 
-# Add project root to path
-PROJECT_ROOT = Path(__file__).parent
-sys.path.insert(0, str(PROJECT_ROOT))
+ensure_app_paths()
+
+logger = logging.getLogger("discord_bot")
 
 from db.connection import get_conn
 
@@ -121,10 +121,10 @@ def get_companies_list(limit: int = 20) -> list:
 
 def run_collector_script(script_name: str) -> tuple[bool, str]:
     """Run a collector script and return success + output."""
-    script_path = PROJECT_ROOT / "collectors" / script_name
+    script_path = MONOREPO_ROOT / "collectors" / script_name
     if not script_path.exists():
         # Try root directory
-        script_path = PROJECT_ROOT / script_name
+        script_path = MONOREPO_ROOT / script_name
     
     if not script_path.exists():
         return False, f"Script not found: {script_name}"
@@ -132,7 +132,7 @@ def run_collector_script(script_name: str) -> tuple[bool, str]:
     try:
         result = subprocess.run(
             [sys.executable, str(script_path)],
-            cwd=str(PROJECT_ROOT),
+            cwd=str(MONOREPO_ROOT),
             capture_output=True,
             text=True,
             timeout=120,

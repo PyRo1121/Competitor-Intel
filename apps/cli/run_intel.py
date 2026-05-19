@@ -24,14 +24,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-# Add project root to path
-PROJECT_ROOT = Path(__file__).parent
-sys.path.insert(0, str(PROJECT_ROOT))
+from ci_paths import MONOREPO_ROOT, ensure_app_paths
+
+ensure_app_paths()
 
 from automation.collector_registry import EXTRACTION_SCRIPTS
 
 # Ensure log directory exists before configuring logging
-(PROJECT_ROOT / "logs").mkdir(exist_ok=True)
+(MONOREPO_ROOT / "logs").mkdir(exist_ok=True)
 
 # Configure logging
 logging.basicConfig(
@@ -39,13 +39,13 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(PROJECT_ROOT / "logs" / "run_intel.log", mode="a"),
+        logging.FileHandler(MONOREPO_ROOT / "logs" / "run_intel.log", mode="a"),
     ],
 )
 logger = logging.getLogger("run_intel")
 
 from db.connection import get_conn, DB_PATH
-STATE_FILE = PROJECT_ROOT / ".pipeline_state.json"
+STATE_FILE = MONOREPO_ROOT / ".pipeline_state.json"
 
 class PipelineState:
     """Persistent pipeline state for resumable execution."""
@@ -127,9 +127,9 @@ def _run_extraction_script(script: str, dry_run: bool = False) -> Tuple[bool, fl
         logger.info("[DRY RUN] Would run %s", script)
         return True, 0.0, None
 
-    cmd = [sys.executable, str(PROJECT_ROOT / script)]
+    cmd = [sys.executable, str(MONOREPO_ROOT / script)]
     logger.info("Running: %s", " ".join(cmd))
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+    result = subprocess.run(cmd, cwd=MONOREPO_ROOT)
     elapsed = time.perf_counter() - started
     if result.returncode != 0:
         msg = f"exit {result.returncode}"
@@ -362,7 +362,7 @@ def main():
         logging.getLogger().setLevel(getattr(logging, args.log_level))
 
     # Ensure log directory exists
-    (PROJECT_ROOT / "logs").mkdir(exist_ok=True)
+    (MONOREPO_ROOT / "logs").mkdir(exist_ok=True)
 
     exit_code = run_full_sweep(dry_run=args.dry_run)
     sys.exit(exit_code)

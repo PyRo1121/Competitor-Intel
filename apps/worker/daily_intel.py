@@ -8,6 +8,10 @@ import logging
 import sys
 import time
 
+from ci_paths import ensure_app_paths
+
+ensure_app_paths()
+
 from automation.collector_registry import DAILY_SEQUENTIAL
 from automation.run_utils import configure_logging, log_timings, run_script
 

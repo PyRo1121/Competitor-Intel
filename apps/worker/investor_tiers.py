@@ -36,8 +36,10 @@ def get_investor_tier(name: str) -> int:
 def enrich_investors_from_events():
     """Scan intelligence_events and link investors with tier."""
     import sqlite3
-    from pathlib import Path
-    DB = Path.home() / ".hermes" / "agents" / "competitor_intel" / "competitor_intel.db"
+
+    from ci_paths import db_path
+
+    DB = db_path()
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
     

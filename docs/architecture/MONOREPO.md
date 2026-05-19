@@ -11,81 +11,80 @@ Competitor-Intel/
 │   ├── dashboard/           # Svelte 5 + Vite frontend
 │   ├── worker/              # Daily intel pipeline entrypoints
 │   └── cli/                 # intel.py, run_intel.py scripts
-├── packages/                # Shared libraries
-│   ├── py-collectors/       # Version A collectors (production)
-│   ├── py-core/             # db/, utils/, alerts/, config/
-│   └── py-enterprise/       # src/competitor_intel/ (SQLAlchemy)
+├── packages/                # uv workspace members
+│   ├── py-core/             # competitor-intel-core (db, utils, alerts, ci_paths)
+│   ├── py-collectors/       # competitor-intel-collectors (collectors/)
+│   └── py-enterprise/       # competitor-intel (src/competitor_intel/)
 ├── infra/scripts/           # Dedupe, migration, deploy helpers
 ├── integrations/hermes/     # Thin client for Hermes agents
 ├── docs/                    # Handbook + architecture
+├── pyproject.toml           # uv virtual workspace root
+├── uv.lock                  # Locked Python dependencies
 └── data/                    # SQLite, exports (gitignored)
 ```
 
+## Toolchain
+
+### Python — uv workspace
+
+Root `pyproject.toml` defines a **virtual workspace** (`tool.uv.package = false`) with three installable members:
+
+| Package | Path | Import surface |
+|---------|------|----------------|
+| `competitor-intel-core` | `packages/py-core` | `db`, `utils`, `alerts`, `ci_paths` |
+| `competitor-intel-collectors` | `packages/py-collectors` | `collectors.*` |
+| `competitor-intel` | `packages/py-enterprise` | `competitor_intel.*` |
+
+```bash
+uv sync                              # install all workspace packages + dev deps
+uv run python apps/worker/daily_intel.py
+uv run python apps/cli/run_intel.py
+uv run competitor-intel collect -c rss
+uv run pytest tests/
+```
+
+Path resolution for DB, exports, and reports: `ci_paths.py` (`CI_DB_PATH` override supported).
+
+Worker/cli scripts call `ci_paths.ensure_app_paths()` so `automation` and sibling modules resolve without manual `PYTHONPATH`.
+
+### JavaScript — Bun only
+
+| App | Commands | Port |
+|-----|----------|------|
+| `apps/api` | `bun install`, `bun run dev`, `bun run build` | 3000 |
+| `apps/dashboard` | `bun install`, `bun run dev`, `bun run check` | 5173 |
+
+No npm/yarn/pnpm. Lockfiles: `apps/api/bun.lock`, `apps/dashboard/bun.lock`.
+
 ## Design principles
 
-1. **Apps own entrypoints** — `daily_intel.py` lives under `apps/worker/`; HTTP server under `apps/api/`.
-2. **Packages own reusable code** — collectors and DB access are importable without running a full app.
-3. **One database file** — `CI_DB_PATH` defaults to `<repo>/data/competitor_intel.db`.
-4. **API-first integration** — external systems (Hermes, cron, CI) call HTTP or CLI, not Python imports across repos.
-5. **Dual Python stacks (transitional)** — operational `py-collectors` + enterprise `py-enterprise`; converge over time.
+1. **Apps own entrypoints** — `daily_intel.py` under `apps/worker/`; HTTP under `apps/api/`.
+2. **Packages own reusable code** — installed via uv workspace, not ad-hoc `PYTHONPATH`.
+3. **One database file** — `data/competitor_intel.db` (or `CI_DB_PATH`).
+4. **API-first integration** — Hermes calls HTTP or CLI, not cross-repo Python imports.
+5. **Dual Python stacks (transitional)** — operational collectors + enterprise SQLAlchemy package.
 
-## PYTHONPATH (development)
+## Root symlinks (legacy subprocess paths)
 
-Until packages are published as installable wheels with proper namespaces:
-
-```bash
-export PYTHONPATH="\
-packages/py-collectors:\
-packages/py-core:\
-apps/worker:\
-apps/cli:\
-packages/py-enterprise/src"
-```
-
-Install enterprise package editable:
-
-```bash
-pip install -e ".[dev]"
-```
-
-Collectors import as flat modules (`from db.connection import get_conn`, `from collectors.rss_collector import ...`) matching the legacy layout.
-
-### Root symlinks (legacy script paths)
-
-Subprocess orchestration expects `collectors/` and `run_intel.py` at repo root:
+Orchestration still references repo-root paths for subprocess calls:
 
 ```
-collectors   → packages/py-collectors
+collectors   → packages/py-collectors/collectors
 run_intel.py → apps/cli/run_intel.py
-automation     → apps/worker/automation
+automation   → apps/worker/automation
 ```
 
-Remove symlinks once all script paths are updated to monorepo locations.
+Remove when `collector_registry.py` paths are fully monorepo-native.
 
-## Future: uv / hatch workspace
-
-Root `pyproject.toml` documents the layout. A full `[tool.uv.workspace]` or hatch multi-package setup can split:
-
-- `competitor-intel-core` → `packages/py-core`
-- `competitor-intel-collectors` → `packages/py-collectors`
-- `competitor-intel` → `packages/py-enterprise`
-
-That refactor is deferred to avoid breaking imports during migration.
-
-## TypeScript apps
-
-| App | Package manager | Port |
-|-----|-----------------|------|
-| `apps/api` | Bun | 3000 |
-| `apps/dashboard` | Bun | 5173 (Vite dev) |
-
-API reads SQLite via `bun:sqlite`; path from `CI_DB_PATH` or monorepo `data/competitor_intel.db`.
-
-## Tests
+## Makefile
 
 ```bash
-export PYTHONPATH=...  # as above
-pytest tests/
+make sync            # uv sync
+make daily           # uv run daily_intel
+make api-dev         # bun API
+make dashboard-dev   # bun Vite
+make compile         # compileall via uv
+make test            # pytest via uv
 ```
 
 ## Related

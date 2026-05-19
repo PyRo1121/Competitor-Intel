@@ -4,11 +4,13 @@ This becomes the core structured data layer.
 """
 
 import sqlite3
-from pathlib import Path
 import logging
+
+from ci_paths import db_path
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path.home() / ".hermes" / "agents" / "competitor_intel" / "competitor_intel.db"
+DB_PATH = db_path()
 
 def create_intelligence_events_table():
     """Create the intelligence_events table if it does not exist."""

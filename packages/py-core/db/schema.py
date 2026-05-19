@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 import logging
 
-from utils.monorepo_paths import db_path
+from ci_paths import db_path
 
 logger = logging.getLogger(__name__)
 

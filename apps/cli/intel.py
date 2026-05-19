@@ -28,10 +28,11 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-logger = logging.getLogger("intel_cli")
+from ci_paths import EXPORTS_DIR, MONOREPO_ROOT, ensure_app_paths
 
-PROJECT_ROOT = Path(__file__).parent
-sys.path.insert(0, str(PROJECT_ROOT))
+ensure_app_paths()
+
+logger = logging.getLogger("intel_cli")
 
 from db.connection import get_conn
 
@@ -53,7 +54,7 @@ REPORTS = {
 
 def run_script(script_path: str, args: list = None) -> tuple[bool, str]:
     """Run a Python script and return (success, output)."""
-    full_path = PROJECT_ROOT / script_path
+    full_path = MONOREPO_ROOT / script_path
     if not full_path.exists():
         return False, f"Script not found: {full_path}"
     
@@ -64,7 +65,7 @@ def run_script(script_path: str, args: list = None) -> tuple[bool, str]:
     try:
         result = subprocess.run(
             cmd,
-            cwd=str(PROJECT_ROOT),
+            cwd=str(MONOREPO_ROOT),
             capture_output=True,
             text=True,
             timeout=180,
@@ -314,7 +315,7 @@ def cmd_export(args):
     """)
     events = [dict(row) for row in cursor.fetchall()]
     
-    export_dir = PROJECT_ROOT / "exports"
+    export_dir = EXPORTS_DIR
     export_dir.mkdir(exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -5,13 +5,13 @@ Embed all funding events using qwen3-embedding:4b.
 import json
 import logging
 import sqlite3
-from pathlib import Path
 
 from embeddings import get_embedding
+from ci_paths import db_path
 
 logger = logging.getLogger("embed_funding_events")
 
-DB_PATH = Path.home() / ".hermes" / "agents" / "competitor_intel" / "competitor_intel.db"
+DB_PATH = db_path()
 
 
 def embed_funding_events():

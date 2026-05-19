@@ -16,7 +16,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
 
-from utils.monorepo_paths import db_path
+from ci_paths import db_path
 
 DB_PATH = db_path()
 

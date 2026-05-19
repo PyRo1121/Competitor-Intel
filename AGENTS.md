@@ -55,6 +55,7 @@ When the user's request matches an available gstack skill, use it. When in doubt
 
 - **Root:** `~/Documents/Competitor-Intel/`
 - **Operational pipeline:** `packages/py-collectors/`, `apps/worker/daily_intel.py`, SQLite `data/competitor_intel.db`
+- **Python toolchain:** `uv sync` from repo root (no pip)
 - **Handbook:** `docs/HANDBOOK.md`
 - **Dashboard/API:** `apps/dashboard/`, `apps/api/`
 - **Hermes integration:** `integrations/hermes/` — HTTP/CLI only, no embedded imports

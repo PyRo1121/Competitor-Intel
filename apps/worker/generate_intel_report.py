@@ -8,11 +8,12 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 import logging
+
+from ci_paths import REPORTS_DIR, db_path
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path.home() / ".hermes" / "agents" / "competitor_intel" / "competitor_intel.db"
-REPORTS_DIR = Path.home() / ".hermes" / "agents" / "competitor_intel" / "reports"
-
+DB_PATH = db_path()
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
