@@ -120,7 +120,7 @@ Runs in order:
 19. `daily_brief.py --export` — Report generation
 20. `tweet_generator.py` — Social content
 
-**To add a new collector**: Create the file in `collectors/`, add a `run()` function, and add it to the steps list in `daily_intel.py`.
+**To add a new collector**: Create the file under `packages/py-collectors/collectors/`, add a `run()` function, and register it in `apps/worker/automation/collector_registry.py`.
 
 ### Ingestion conventions (collectors)
 
@@ -129,7 +129,7 @@ Runs in order:
 - `signal_type` column stores dedup key (URL hash or scoped key like `x_post:{id}`).
 - Human categories live in `data_json`: `kind`, `category`, `channel`.
 
-### Feed registry (`collectors/sources_registry.py`)
+### Feed registry (`packages/py-collectors/collectors/sources_registry.py`)
 
 Single source of truth for RSS/Atom URLs. Each `FeedSource` has `name`, `url`, `category`, `trust_tier`, `enabled`, optional `disabled_reason`.
 
@@ -445,38 +445,39 @@ run()
 
 ### Python Collectors
 ```bash
-cd ~/.hermes/agents/competitor_intel
+cd ~/Documents/Competitor-Intel
+uv sync
 
 # Run individual collector
-python collectors/rss_collector.py
-python collectors/signal_processor.py
-python collectors/company_discovery.py  # scoring
-python collectors/momentum_detector.py
-python collectors/competitor_mapper.py
+uv run python packages/py-collectors/collectors/rss_collector.py
+uv run python packages/py-collectors/collectors/signal_processor.py
+uv run python packages/py-collectors/collectors/candidate_discovery.py
+uv run python packages/py-collectors/collectors/company_ranker.py
 
 # Run full daily pipeline
-python automation/daily_intel.py
+uv run python apps/worker/daily_intel.py
+make daily
 
-# Run alert engine
-python alerts/alert_engine.py
+# Alerts
+uv run python packages/py-core/alerts/alert_engine.py
 
-# Universal CLI
-python intel.py
+# CLI
+uv run python apps/cli/intel.py
 ```
 
 ### API
 ```bash
-cd api
+cd apps/api
 bun install
-bun run src/index.ts          # Start on port 3000
-bun run build                 # Bundle to dist/
+bun run dev                   # Port from package.json
+bun run build
 ```
 
 ### Dashboard
 ```bash
-cd dashboard
+cd apps/dashboard
 bun install
-bun run dev                   # Development server
+bun run dev
 bun run build                 # Production build
 ```
 
