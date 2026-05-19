@@ -17,6 +17,13 @@ export const eventQuery = pagination.extend({
 export const searchQuery = z.object({
   q: z.string().min(1).max(200),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+  /** keyword = SQL LIKE; semantic = Ollama embeddings; auto = semantic with keyword fallback */
+  mode: z.enum(["keyword", "semantic", "auto"]).default("auto"),
+  event_type: z.string().optional(),
+  company_id: z.coerce.number().int().positive().optional(),
+  min_confidence: z.coerce.number().min(0).max(1).optional(),
 });
 
-export const companyQuery = pagination;
+export const companyQuery = pagination.extend({
+  sort: z.enum(["name", "score"]).default("name"),
+});
