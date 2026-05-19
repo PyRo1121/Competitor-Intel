@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import { Hono } from "hono";
 import { getDB } from "../db";
 
@@ -5,8 +6,15 @@ const app = new Hono();
 
 app.get("/", (c) => {
   const db = getDB();
+  const rawLimit = Number(c.req.query("limit"));
+  const limit = Math.min(
+    Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1),
+    200,
+  );
 
-  const companies = db.prepare(`
+  const companies = db
+    .prepare(
+      `
     SELECT c.id, c.name, c.slug, c.industry, c.status, c.score,
            (SELECT COUNT(*) FROM funding_rounds WHERE company_id = c.id) as funding_rounds,
            (SELECT COUNT(*) FROM job_postings WHERE company_id = c.id AND is_active = 1) as active_jobs,
@@ -14,9 +22,12 @@ app.get("/", (c) => {
     FROM companies c
     WHERE c.score IS NOT NULL
     ORDER BY c.score DESC NULLS LAST
-  `).all();
+    LIMIT ?
+  `,
+    )
+    .all(limit);
 
-  return c.json({ companies, count: companies.length });
+  return c.json({ companies, count: companies.length, limit });
 });
 
 app.get("/:id", (c) => {
@@ -37,7 +48,7 @@ app.get("/:id", (c) => {
   });
 });
 
-function computeBreakdown(db: any, companyId: string): Record<string, number> {
+function computeBreakdown(db: Database, companyId: string): Record<string, number> {
   const funding = db.prepare(
     `SELECT COUNT(*) as rounds, COALESCE(SUM(amount_usd), 0) as total
      FROM funding_rounds WHERE company_id = ?`
