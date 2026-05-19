@@ -14,21 +14,20 @@ This is a private company intelligence platform that automatically discovers, mo
 
 The project has **two parallel architectures**. This is critical to understand.
 
-### Version A: Legacy `collectors/` (OPERATIONAL)
-- Flat Python files in `collectors/` directory
-- Direct SQLite via `db/connection.py` (raw sqlite3 module)
-- All 33 collector/processor modules live here
-- Wired into `automation/daily_intel.py` pipeline
+### Version A: Operational monorepo packages (DAILY)
+- Collectors: `packages/py-collectors/collectors/`
+- SQLite + ingest: `packages/py-core/db/` (`get_conn`, `insert_raw_signal_dedup`)
+- Worker orchestration: `apps/worker/automation/` (`collector_registry.py`, `daily_intel.py`)
 - **This is what runs daily.**
 
-### Version B: Enterprise `src/competitor_intel/` (NOT WIRED)
+### Version B: Enterprise `packages/py-enterprise/` (NOT WIRED)
 - Python package with `core/`, `db/`, `collectors/`, `reports/` subpackages
 - SQLAlchemy 2.0 ORM with 28 models
 - Alembic migrations
 - Pydantic settings
 - **Not wired to daily pipeline.** Exists as enterprise architecture foundation.
 
-**Rule**: When adding new functionality, add to `collectors/` (Version A) to match the operational pattern. The enterprise version can be wired later.
+**Rule**: Add new pipeline code under `packages/py-collectors/` and `packages/py-core/`. Enterprise SQLAlchemy (`packages/py-enterprise/`) stays optional until wired.
 
 ## 3. Database Schema (30 Tables)
 
@@ -77,7 +76,7 @@ The project has **two parallel architectures**. This is critical to understand.
 ```
 RSS/X/GitHub/PH/HN/CB/AL ──► raw_signals (unprocessed)
                                     │
-                           signal_processor_v2.py
+                           signal_processor.py
                                     │
                            intelligence_events (processed)
                                     │
@@ -87,6 +86,16 @@ RSS/X/GitHub/PH/HN/CB/AL ──► raw_signals (unprocessed)
                     │               │               │
               Discord webhook  companies.score  competitor_relationships
 ```
+
+### Scheduling (frequent vs Grok vs daily)
+
+See **[SCHEDULING.md](SCHEDULING.md)** for cron examples (hourly RSS, 5×/day Eastern Grok, once-daily full sweep).
+
+| Command | Role |
+|---------|------|
+| `make frequent` | RSS / HN / open web + `signal_processor` (no X quota) |
+| `make grok-refresh` | Hermes `x_search` + X ingest + reprocess |
+| `make daily-tiered` | Full daily with `CI_SKIP_GROK_X=1` after Grok cron |
 
 ### Daily Pipeline (`automation/daily_intel.py`)
 Runs in order:
@@ -102,7 +111,7 @@ Runs in order:
 10. `website_monitor.py` — Website changes
 11. `job_tracker.py` — Job postings
 12. `tech_stack_detector.py` — Tech fingerprinting
-13. `signal_processor_v2.py` — Signal processing
+13. `signal_processor.py` — Signal processing
 14. `competitor_mapper.py` — Relationship detection
 15. `momentum_detector.py` — Trending analysis
 16. `enrichment_runner.py` — Company enrichment
@@ -173,9 +182,19 @@ No working public RSS found (kept disabled): Greylock, First Round Review, Besse
 2. Persist with `x_monitor.process_grok_x_results(company, json_posts)` or `x_signal_collector.store_grok_batch(query, posts)`.
 3. Optional batch file: set `GROK_X_RESULTS_PATH` to JSON `[{"query": "...", "results": [...]}]` before `x_signal_collector.run()`.
 
-Migrated collectors (http + dedup): hackernews, producthunt, crunchbase, angellist, edgar, techcrunch_edgar, x_signal_collector.
+Migrated collectors (http + dedup): hackernews (Firebase + Algolia Show HN), producthunt, crunchbase, angellist, edgar (optional `EDGAR_TRACKED_CIKS` + Form D quarterly ZIP — all primary issuers, no sector filter), ycombinator (public directory JSON, all companies stored), esma_mica (MiCA CASP CSV), techcrunch_edgar, x_signal_collector.
 
-## 5. Signal Processor v2 (`collectors/signal_processor_v2.py`)
+RSS/HN ingest is **discovery-first**: high-signal items and headline entity extraction are stored even when no company row exists yet. Names flow into `company_candidates` after `signal_processor`.
+
+### Discovery → promote → rank (daily, after `signal_processor`)
+
+1. **`candidate_discovery.py`** — Scans recent `raw_signals`, harvests plausible company names (payload fields + headline patterns), scores **attention** (volume, source diversity, hype language), upserts `company_candidates`.
+2. **`auto_promote.py`** — Promotes candidates with score ≥ 0.65 into `companies` (sector-agnostic).
+3. **`company_ranker.py`** — Updates `companies.score` from 30-day signal volume, velocity, source diversity, events, and hype. Dashboard top-N uses `ORDER BY score DESC`.
+
+No fixed “big private” watchlist is required for the firehose; optional CIKs only via `EDGAR_TRACKED_CIKS`.
+
+## 5. Signal Processor (`collectors/signal_processor.py`)
 
 Converts raw signals into structured intelligence events.
 
@@ -198,9 +217,15 @@ Converts raw signals into structured intelligence events.
 ### Company Alias System
 Loads company names, slugs, and X handles into a lookup table. Supports token-level matching for multi-word names.
 
-## 6. Scoring Engine (`collectors/company_discovery.py`)
+## 6. Scoring
 
-VC-aligned 12-factor model. All factors computed from real database data. Zero placeholders.
+### 6a. Attention rank (`collectors/company_ranker.py`)
+
+**Primary ranking for “who’s hot”** — sector-agnostic, driven by the signal firehose. Run automatically in `DAILY_SEQUENTIAL` after discovery/promote. Composite 0–1 written to `companies.score` and `last_scored_at`.
+
+### 6b. VC deep score (`collectors/company_discovery.py`)
+
+Optional 12-factor model for dossier-style analysis. All factors computed from real database data. Zero placeholders.
 
 Each factor produces a 0-1 score, multiplied by its weight, summed for composite score.
 
@@ -424,7 +449,7 @@ cd ~/.hermes/agents/competitor_intel
 
 # Run individual collector
 python collectors/rss_collector.py
-python collectors/signal_processor_v2.py
+python collectors/signal_processor.py
 python collectors/company_discovery.py  # scoring
 python collectors/momentum_detector.py
 python collectors/competitor_mapper.py
