@@ -23,4 +23,6 @@ Hermes agents should **not** import Python from the old agent tree. Point agents
 | `CI_API_URL` | `http://localhost:3000` |
 | `CI_DB_PATH` | `$MONOREPO/data/competitor_intel.db` |
 
-Full guide: [docs/architecture/HERMES_INTEGRATION.md](../../docs/architecture/HERMES_INTEGRATION.md)
+Full guide: [docs/HERMES_INTEGRATION.md](../../docs/HERMES_INTEGRATION.md) · [architecture detail](../../docs/architecture/HERMES_INTEGRATION.md)
+
+**Hermes agents:** run only this script (or HTTP API). Do not execute Python under `~/.hermes/agents/competitor_intel/`.

@@ -84,3 +84,12 @@ Hermes-side thin client: `integrations/hermes/` (example shell script only). Cop
 Legacy path: `~/.hermes/agents/competitor_intel/` (frozen; see `MIGRATED.md`).
 
 New path: `~/Documents/Competitor-Intel/`.
+
+### Deprecated in Hermes tree
+
+Do not run from `~/.hermes/agents/competitor_intel/`:
+
+- `run_intel.py`, `intel.py`, `automation/daily_intel.py`
+- Any `python collectors/*.py` with Hermes `sys.path` hacks
+
+Use [`integrations/hermes/call_intel.sh`](../../integrations/hermes/call_intel.sh) or monorepo `make daily` / `make intel`. Operator summary: [docs/HERMES_INTEGRATION.md](../HERMES_INTEGRATION.md).

@@ -7,8 +7,8 @@
 This is a private company intelligence platform that automatically discovers, monitors, scores, and alerts on AI startups and tech companies. It ingests data from 99 RSS feeds, 60 X/Twitter queries, and 8 direct collectors, processes signals into structured intelligence events, scores companies on a 12-factor VC model, detects trending momentum, maps competitor relationships, and exposes everything via a REST API and Svelte dashboard.
 
 **Runtime**: Python 3.14 for collectors/pipeline, Bun for API/dashboard
-**Database**: SQLite (`competitor_intel.db`) at project root
-**Location**: `~/.hermes/agents/competitor_intel/`
+**Database**: SQLite at `data/competitor_intel.db` (override with `CI_DB_PATH`)
+**Location**: `~/Documents/Competitor-Intel/` (monorepo). Hermes calls via `integrations/hermes/call_intel.sh` only.
 
 ## 2. Two Architecture Versions
 
