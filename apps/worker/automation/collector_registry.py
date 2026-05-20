@@ -84,7 +84,7 @@ DAILY_SEQUENTIAL: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("collectors/auto_promote.py", ()),
     ("collectors/company_ranker.py", ()),
     ("scripts/phase_b_populate_funding.py", ()),
-    ("scripts/phase_b_populate_company.py", ()),
+    # phase_b_populate_company: opt-in via `make phase-b-company` (slow web enrichment)
     ("collectors/competitor_mapper.py", ()),
     ("collectors/momentum_detector.py", ()),
     ("collectors/enrichment/enrichment_runner.py", ()),

@@ -124,7 +124,7 @@
 						<li class="text-sm">
 							<span class="ci-mono text-xs text-[var(--color-ink-faint)]">{i + 1}.</span>
 							{#if row.slug}
-								<span class="ml-1 font-medium text-[var(--color-ink)]">{row.name}</span>
+								<a href={`/companies/${row.slug}`} class="ci-link ml-1 font-medium">{row.name}</a>
 							{:else}
 								<span class="ml-1 font-medium">{row.name}</span>
 							{/if}

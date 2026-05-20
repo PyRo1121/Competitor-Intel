@@ -97,28 +97,15 @@ See **[SCHEDULING.md](SCHEDULING.md)** for cron examples (hourly RSS, 5×/day Ea
 | `make grok-refresh` | Hermes `x_search` + X ingest + reprocess |
 | `make daily-tiered` | Full daily with `CI_SKIP_GROK_X=1` after Grok cron |
 
-### Daily Pipeline (`automation/daily_intel.py`)
-Runs in order:
-1. `run_intel.py` — Base intel collection
-2. `funding_collector.py` — Funding events
-3. `big_deals_collector.py` — Major deal tracking
-4. `youtube_collector.py` — YouTube monitoring
-5. `investor_collector.py` — Investor tracking
-6. `producthunt_collector.py` — Product Hunt launches
-7. `hackernews_collector.py` — HN stories
-8. `crunchbase_collector.py` — Crunchbase data
-9. `angellist_collector.py` — AngelList data
-10. `website_monitor.py` — Website changes
-11. `job_tracker.py` — Job postings
-12. `tech_stack_detector.py` — Tech fingerprinting
-13. `signal_processor.py` — Signal processing
-14. `competitor_mapper.py` — Relationship detection
-15. `momentum_detector.py` — Trending analysis
-16. `enrichment_runner.py` — Company enrichment
-17. `embedding_generator.py` — Embedding generation
-18. `alert_engine.py` — Alert dispatch
-19. `daily_brief.py --export` — Report generation
-20. `tweet_generator.py` — Social content
+### Daily Pipeline (`apps/worker/daily_intel.py`)
+Parallel ingest (RSS, HN, EDGAR, YC, etc.) then sequential:
+1. `signal_url_fanout.py` — Article URLs from X/HN
+2. `signal_processor.py` — `raw_signals` → `intelligence_events`
+3. **`candidate_discovery.py`** → **`auto_promote.py`** → **`company_ranker.py`**
+4. `scripts/phase_b_populate_funding.py` — Funding claims → rounds
+5. Enrichment, embeddings, alerts, brief export
+
+Company profile web scrape (`scripts/phase_b_populate_company.py`) is **opt-in** via `make phase-b-company`, not default daily (slow / rate-limited sources).
 
 **To add a new collector**: Create the file under `packages/py-collectors/collectors/`, add a `run()` function, and register it in `apps/worker/automation/collector_registry.py`.
 

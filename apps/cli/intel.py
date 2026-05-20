@@ -17,6 +17,8 @@ Usage:
     python intel.py pipeline           Run full pipeline (collect + report)
     python intel.py youtube            Run YouTube collector
     python intel.py promote            Run auto-promotion
+    python intel.py discover           Harvest company_candidates from signals
+    python intel.py rank               Refresh companies.score from attention
 """
 
 import argparse
@@ -83,7 +85,9 @@ def run_script(script_path: str, args: list = None) -> tuple[bool, str]:
 def cmd_daily(args):
     """Generate daily brief."""
     logger.info("Generating daily brief...")
-    success, output = run_script("daily_brief.py", ["--export"] if args.export else [])
+    success, output = run_script(
+        "apps/worker/daily_brief.py", ["--export"] if args.export else []
+    )
     if success:
         logger.info("Daily brief generated successfully")
         logger.info("Output:\n%s", output)
@@ -176,7 +180,12 @@ def cmd_status(args):
     
     cursor.execute("SELECT COUNT(*) FROM intelligence_events WHERE created_at >= datetime('now', '-24 hours')")
     stats["events_24h"] = cursor.fetchone()[0]
-    
+
+    cursor.execute(
+        "SELECT COUNT(*) FROM company_candidates WHERE status = 'pending'"
+    )
+    stats["pending_candidates"] = cursor.fetchone()[0]
+
     conn.close()
     
     logger.info("╔════════════════════════════════════╗")
@@ -191,6 +200,8 @@ def cmd_status(args):
     logger.info("║ Last 24h:                           ║")
     logger.info("║   Signals:     %-20s ║", stats["signals_24h"])
     logger.info("║   Events:      %-20s ║", stats["events_24h"])
+    logger.info("╠════════════════════════════════════╣")
+    logger.info("║ Pending discovery: %-16s ║", stats["pending_candidates"])
     logger.info("╚════════════════════════════════════╝")
     
     return 0
@@ -371,7 +382,7 @@ def cmd_youtube(args):
 def cmd_process(args):
     """Process unprocessed raw signals into intelligence events."""
     logger.info("Processing unprocessed signals...")
-    success, output = run_script("collectors/signal_processor_v2.py")
+    success, output = run_script("collectors/signal_processor.py")
     logger.info("Output:\n%s", output)
     return 0 if success else 1
 
@@ -426,6 +437,20 @@ def cmd_sources(args):
 def cmd_promote(args):
     logger.info("Running auto-promotion...")
     success, output = run_script("collectors/auto_promote.py")
+    logger.info("Output:\n%s", output)
+    return 0 if success else 1
+
+
+def cmd_discover(args):
+    logger.info("Running candidate discovery...")
+    success, output = run_script("collectors/candidate_discovery.py")
+    logger.info("Output:\n%s", output)
+    return 0 if success else 1
+
+
+def cmd_rank(args):
+    logger.info("Running company attention ranker...")
+    success, output = run_script("collectors/company_ranker.py")
     logger.info("Output:\n%s", output)
     return 0 if success else 1
 
@@ -556,6 +581,8 @@ Examples:
     subparsers.add_parser("sources", help="Show all configured RSS sources")
     
     subparsers.add_parser("promote", help="Run auto-promotion")
+    subparsers.add_parser("discover", help="Harvest company_candidates from signals")
+    subparsers.add_parser("rank", help="Refresh companies.score from attention")
     subparsers.add_parser("producthunt", help="Run Product Hunt collector")
     subparsers.add_parser("hackernews", help="Run Hacker News collector")
     subparsers.add_parser("jobs", help="Run job posting tracker")
@@ -583,6 +610,8 @@ Examples:
         "enhanced-funding": cmd_enhanced_funding,
         "sources": cmd_sources,
         "promote": cmd_promote,
+        "discover": cmd_discover,
+        "rank": cmd_rank,
         "producthunt": cmd_producthunt,
         "hackernews": cmd_hackernews,
         "jobs": cmd_jobs,

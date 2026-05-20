@@ -20,7 +20,11 @@
 | Production SQLite migration | ✅ 100% | `data/competitor_intel.db` present (~18 MB) |
 | Decommission Hermes agent tree | ✅ 90% | `MIGRATED.md` updated; Hermes repo not committed |
 | Enterprise package wired to daily | ⬜ 0% | Roadmap — operational collectors remain primary |
-| CI/CD + collector tests | ⬜ 15% | `tests/` present; no pipeline yet |
+| CI/CD + collector tests | 🟡 85% | Local `make test-cov` + `make phase-a-eval`; no GHA (by choice) |
+| Phase A pipeline (processor, API semantic, migrations) | ✅ 100% | `make phase-a-gate` PASS; golden 54 @ ≥90%; keyword classify only (no `signal_llm_router`); see `docs/PHASE_A_WORLD_CLASS.md` |
+| Phase B funding (claims → rounds → investors) | 🟡 70% | Schema + `funding_enricher` / aggregator wired; `make phase-b-funding` + daily step; investor parsing still thin on many claims |
+| Phase B jobs (claims → postings → skills) | 🟡 75% | Greenhouse/Lever/Ashby ingest; `make phase-b-jobs`; granular API at `/api/jobs/*` |
+| Hermes Grok X ingest | ✅ 100% | OAuth `x_search`; `grok_x_fetcher.py`, `smoke-hermes-x`, `daily_intel` auto-fetch flags |
 
 ## Sync summary (2026-05-19 migration pass)
 
@@ -47,10 +51,32 @@ export CI_DB_PATH="$PWD/data/competitor_intel.db"
 uv sync
 uv run python -m compileall -q packages apps/worker apps/cli tests
 make daily   # or integrations/hermes/call_intel.sh daily
+make phase-a-repair && make phase-a-gate && make test-cov && make phase-a-eval
 ```
 
-## Remaining gaps
+## Phase A (2026-05-19)
 
-1. Wire enterprise `competitor_intel` SQLAlchemy collectors into `daily_intel.py`
-2. GitHub Actions (or similar) for `make compile` + `make test`
-3. Point Hermes agent configs at `call_intel.sh` in production cron
+- 1139 signals → 1198 events, 0 orphans, 0 unprocessed, 0 dup `raw_signal_id`
+- ~36% `company_id` null (industry/creator news; `actionable_null_pct` = 0%)
+- 146 mis-tagged Funding rows reclassified to General News
+- Classifier: inflected keywords, partnership/acquisition verbs, margin tie-break
+
+## Phase B (2026-05-19)
+
+- Three-layer model: `funding_round_claims` → `funding_rounds` → `round_participants` / `investor_firms`
+- `scripts/phase_b_populate_funding.py` runs in daily pipeline after `signal_processor`
+- Docs: `docs/PHASE_B.md`; tests: `tests/test_funding_corroboration.py`, `tests/test_funding_enricher.py`
+
+## Discovery pipeline (2026-05-19)
+
+- `candidate_discovery` → `auto_promote` → `company_ranker` in daily + frequent + `intel.py discover|promote|rank`
+- API: `/api/discovery/candidates`, `/api/scoring`, companies `sort=score`, status `pendingCandidates`
+- Dashboard: `/discovery`, home top-attention strip
+- Tests: `tests/test_discovery_pipeline.py`
+- `phase_b_populate_company` removed from default daily (use `make phase-b-company` only)
+
+## Remaining gaps (non-blocking)
+
+1. Enterprise SQLAlchemy collectors optional wire to daily
+2. Hermes production cron → `integrations/hermes/call_intel.sh`
+3. Phase B depth: richer investor parsing, optional company web enrichment
