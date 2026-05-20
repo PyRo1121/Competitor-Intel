@@ -1,87 +1,201 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { getStatus } from "$lib/api";
-  import StatCard from "$lib/components/StatCard.svelte";
-  import { Building2, Radio, Activity, Wallet, Clock } from "lucide-svelte";
+	import { onMount } from "svelte";
+	import { getFunding, getJobs, getStatus, getTopScored } from "$lib/api";
+	import { formatEventType } from "$lib/freshness";
+	import StatCard from "$lib/components/StatCard.svelte";
+	import IntelHealthCard from "$lib/components/IntelHealthCard.svelte";
+	import PageHeader from "$lib/components/PageHeader.svelte";
+	import type { StatusResponse } from "$lib/types/status";
+	import { ArrowRight, Clock } from "lucide-svelte";
 
-  let status = $state<{
-    counts: { companies: number; signals: number; events: number; funding: number; xPosts: number };
-    last24h: { signals: number; events: number };
-    topSources: { source: string; count: number }[];
-    recentEvents: { event_type: string; company_name: string | null; amount_usd: number | null; created_at: string }[];
-  } | null>(null);
+	let status = $state<StatusResponse | null>(null);
+	let loadError = $state<string | null>(null);
+	let phaseB = $state<{ rounds: number; claims: number; activeJobs: number } | null>(null);
+	let topAttention = $state<{ name: string; score: number; slug?: string | null }[]>([]);
 
-  onMount(async () => {
-    try {
-      status = await getStatus();
-    } catch (e) {
-      console.error(e);
-    }
-  });
+	onMount(async () => {
+		try {
+			const [statusRes, fundingRes, jobsRes, scoredRes] = await Promise.all([
+				getStatus(),
+				getFunding().catch(() => null),
+				getJobs({ limit: 1, active: true }).catch(() => null),
+				getTopScored(5).catch(() => null),
+			]);
+			status = statusRes;
+			if (fundingRes?.stats) {
+				phaseB = {
+					rounds: fundingRes.stats.total_rounds ?? 0,
+					claims: fundingRes.stats.total_claims ?? 0,
+					activeJobs: jobsRes?.stats?.active_postings ?? jobsRes?.count ?? 0,
+				};
+			}
+			if (scoredRes?.companies?.length) {
+				topAttention = scoredRes.companies
+					.filter((c) => c.score != null)
+					.map((c) => ({
+						name: c.name,
+						score: Number(c.score),
+						slug: c.slug,
+					}));
+			}
+		} catch (err) {
+			loadError = err instanceof Error ? err.message : "Failed to load dashboard";
+			console.error(err);
+		}
+	});
 
-  function formatTime(iso: string) {
-    if (!iso) return "—";
-    const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function eventLabel(type: string) {
-    return type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-  }
+	function formatTime(iso: string) {
+		const date = new Date(iso);
+		if (Number.isNaN(date.getTime())) return "—";
+		return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+	}
 </script>
 
-<div class="p-8 max-w-7xl mx-auto">
-  <div class="mb-8">
-    <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
-    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Competitor intelligence overview</p>
-  </div>
+<div class="ci-page">
+	<PageHeader
+		title="Dashboard"
+		subtitle="Operational picture of competitors — corpus size, ingest freshness, and what moved in the last day."
+	/>
 
-  {#if !status}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {#each [1, 2, 3, 4] as _}
-        <div class="h-24 rounded-xl bg-slate-100 animate-pulse dark:bg-slate-800"></div>
-      {/each}
-    </div>
-  {:else}
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-      <StatCard title="Companies" value={status.counts.companies} icon="chart" />
-      <StatCard title="Signals" value={status.counts.signals} change={`${status.last24h.signals} in 24h`} icon="activity" />
-      <StatCard title="Events" value={status.counts.events} change={`${status.last24h.events} in 24h`} icon="zap" />
-      <StatCard title="Funding" value={status.counts.funding} icon="dollar" />
-    </div>
+	{#if loadError}
+		<div class="ci-alert-error mb-6" role="alert">
+			{loadError}. Ensure the API is running at
+			<code class="ci-mono text-[0.7rem] text-[var(--color-accent-bright)]">PUBLIC_CI_API_URL</code>.
+		</div>
+	{/if}
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <div class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <h2 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Top Sources</h2>
-        <div class="space-y-3">
-          {#each status.topSources as src}
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-slate-700 dark:text-slate-300">{src.source}</span>
-              <span class="text-sm font-medium text-slate-900 dark:text-slate-100">{src.count}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
+	{#if !status}
+		<div class="space-y-6">
+			<div class="ci-skeleton h-44"></div>
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+				{#each [1, 2, 3, 4] as _}
+					<div class="ci-skeleton h-28"></div>
+				{/each}
+			</div>
+		</div>
+	{:else}
+		<div class="mb-8">
+			<IntelHealthCard {status} apiReachable={!loadError} />
+		</div>
 
-      <div class="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <h2 class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Recent Events</h2>
-        <div class="space-y-3">
-          {#each status.recentEvents as ev}
-            <div class="flex items-center justify-between">
-              <div>
-                <span class="text-sm font-medium text-slate-700 dark:text-slate-300">{eventLabel(ev.event_type)}</span>
-                {#if ev.company_name}
-                  <span class="text-xs text-slate-400 dark:text-slate-500 ml-2">{ev.company_name}</span>
-                {/if}
-              </div>
-              <div class="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500">
-                <Clock size={12} />
-                {formatTime(ev.created_at)}
-              </div>
-            </div>
-          {/each}
-        </div>
-      </div>
-    </div>
-  {/if}
+		{#if phaseB}
+			<div class="mb-8 grid gap-3 sm:grid-cols-2" aria-label="Phase B intelligence corpus">
+				<a href="/funding" class="ci-panel group flex items-center justify-between p-4 transition-colors hover:border-[var(--color-accent)]/40">
+					<div>
+						<p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Funding</p>
+						<p class="ci-display mt-1 text-2xl font-medium tabular-nums text-[var(--color-ink)]">
+							{phaseB.rounds}
+							<span class="text-base font-normal text-[var(--color-ink-muted)]">rounds</span>
+						</p>
+						<p class="mt-0.5 text-xs text-[var(--color-ink-faint)]">{phaseB.claims} source claims</p>
+					</div>
+					<ArrowRight size={18} class="text-[var(--color-ink-faint)] group-hover:text-[var(--color-accent)]" />
+				</a>
+				<a href="/jobs" class="ci-panel group flex items-center justify-between p-4 transition-colors hover:border-[var(--color-accent)]/40">
+					<div>
+						<p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Jobs</p>
+						<p class="ci-display mt-1 text-2xl font-medium tabular-nums text-[var(--color-ink)]">
+							{phaseB.activeJobs}
+							<span class="text-base font-normal text-[var(--color-ink-muted)]">active</span>
+						</p>
+						<p class="mt-0.5 text-xs text-[var(--color-ink-faint)]">Canonical postings</p>
+					</div>
+					<ArrowRight size={18} class="text-[var(--color-ink-faint)] group-hover:text-[var(--color-accent)]" />
+				</a>
+			</div>
+		{/if}
+
+		{#if topAttention.length > 0}
+			<a
+				href="/discovery"
+				class="ci-panel group mb-8 block p-4 transition-colors hover:border-[var(--color-accent)]/40"
+			>
+				<div class="mb-3 flex items-center justify-between">
+					<p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">
+						Top attention (30d)
+					</p>
+					<ArrowRight
+						size={18}
+						class="text-[var(--color-ink-faint)] group-hover:text-[var(--color-accent)]"
+					/>
+				</div>
+				<ol class="grid gap-2 sm:grid-cols-5">
+					{#each topAttention as row, i}
+						<li class="text-sm">
+							<span class="ci-mono text-xs text-[var(--color-ink-faint)]">{i + 1}.</span>
+							{#if row.slug}
+								<span class="ml-1 font-medium text-[var(--color-ink)]">{row.name}</span>
+							{:else}
+								<span class="ml-1 font-medium">{row.name}</span>
+							{/if}
+							<span class="ci-mono ml-2 text-xs text-[var(--color-accent-bright)]">
+								{row.score.toFixed(2)}
+							</span>
+						</li>
+					{/each}
+				</ol>
+			</a>
+		{/if}
+
+		<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<StatCard title="Companies" value={status.counts.companies} icon="chart" />
+			<StatCard
+				title="Signals"
+				value={status.counts.signals}
+				change={`${status.last24h.signals} in 24h`}
+				icon="activity"
+			/>
+			<StatCard
+				title="Events"
+				value={status.counts.events}
+				change={`${status.last24h.events} in 24h`}
+				icon="zap"
+			/>
+			<StatCard title="Funding rounds" value={status.counts.funding} icon="dollar" />
+		</div>
+
+		<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+			<section class="ci-panel" aria-labelledby="top-sources-heading">
+				<div class="ci-panel-header">
+					<h2 id="top-sources-heading" class="text-sm font-semibold text-[var(--color-ink)]">Top sources</h2>
+				</div>
+				<ul class="divide-y divide-[var(--color-border-subtle)]" role="list">
+					{#each status.topSources as src (src.source)}
+						<li class="flex items-center justify-between px-5 py-3.5 sm:px-6">
+							<span class="text-sm text-[var(--color-ink-muted)]">{src.source}</span>
+							<span class="ci-mono text-sm font-medium text-[var(--color-ink)]">
+								{src.count.toLocaleString()}
+							</span>
+						</li>
+					{/each}
+				</ul>
+			</section>
+
+			<section class="ci-panel" aria-labelledby="recent-events-heading">
+				<div class="ci-panel-header">
+					<h2 id="recent-events-heading" class="text-sm font-semibold text-[var(--color-ink)]">Recent events</h2>
+				</div>
+				<ul class="divide-y divide-[var(--color-border-subtle)]" role="list">
+					{#each status.recentEvents as ev (ev.created_at + ev.event_type)}
+						<li class="flex items-center justify-between gap-3 px-5 py-3.5 sm:px-6">
+							<div class="min-w-0">
+								<span class="text-sm font-medium text-[var(--color-ink)]">
+									{formatEventType(ev.event_type)}
+								</span>
+								{#if ev.company_name}
+									<span class="ml-2 text-xs text-[var(--color-ink-faint)]">{ev.company_name}</span>
+								{/if}
+							</div>
+							<div
+								class="flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-[var(--color-ink-faint)]"
+							>
+								<Clock size={12} aria-hidden="true" />
+								<time class="ci-mono" datetime={ev.created_at}>{formatTime(ev.created_at)}</time>
+							</div>
+						</li>
+					{/each}
+				</ul>
+			</section>
+		</div>
+	{/if}
 </div>

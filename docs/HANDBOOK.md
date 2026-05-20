@@ -414,9 +414,8 @@ X_MONITORING_QUERIES = [
 - Used for semantic search and signal deduplication
 
 ### Generating Embeddings
-```python
-from collectors.enrichment.embedding_generator import run
-run()
+```bash
+uv run python packages/py-collectors/collectors/enrichment/embedding_generator.py
 ```
 
 ## 14. Known Issues & Technical Debt
@@ -431,7 +430,7 @@ run()
 - No API rate limiting
 - No API authentication
 - Alert engine only supports Discord
-- No frontend pages for competitors, scoring breakdown, or momentum
+- No dedicated momentum or VC 12-factor breakdown pages (attention score + `/discovery` exist)
 - Revenue signals table exists but unused
 - No automated tests for collectors
 
@@ -460,8 +459,11 @@ make daily
 # Alerts
 uv run python packages/py-core/alerts/alert_engine.py
 
-# CLI
-uv run python apps/cli/intel.py
+# CLI (on-demand collectors + discovery pipeline)
+uv run python apps/cli/intel.py rss
+uv run python apps/cli/intel.py discover
+uv run python apps/cli/intel.py promote
+uv run python apps/cli/intel.py rank
 ```
 
 ### API

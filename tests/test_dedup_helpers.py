@@ -9,15 +9,15 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from db import connection as db_connection
-from db.ingest import insert_raw_signal_dedup, raw_signal_exists, url_dedup_key
+from db.ingest import get_company_id, insert_raw_signal_dedup, raw_signal_exists, url_dedup_key
 
 
 class DedupHelperTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.db_path = Path(self._tmp.name) / "dedup_test.db"
-        self._old_path = db_connection.DB_PATH
-        db_connection.DB_PATH = self.db_path
+        self._old_override = db_connection._test_db_override
+        db_connection._test_db_override = self.db_path
         self.conn = sqlite3.connect(self.db_path)
         self.conn.execute(
             """
@@ -39,7 +39,7 @@ class DedupHelperTests(unittest.TestCase):
 
     def tearDown(self):
         self.conn.close()
-        db_connection.DB_PATH = self._old_path
+        db_connection._test_db_override = self._old_override
         self._tmp.cleanup()
 
     def test_url_dedup_key_is_stable(self):
@@ -77,6 +77,25 @@ class DedupHelperTests(unittest.TestCase):
         )
         self.assertEqual(payload["title"], "Hello")
         self.assertEqual(payload["kind"], "news")
+
+    def test_get_company_id_case_insensitive(self):
+        self.conn.execute(
+            """
+            CREATE TABLE companies (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                slug TEXT,
+                x_handle TEXT
+            )
+            """
+        )
+        self.conn.execute(
+            "INSERT INTO companies (id, name, slug, x_handle) VALUES (1, 'Anthropic', 'anthropic', NULL)"
+        )
+        self.conn.commit()
+        self.assertEqual(get_company_id("anthropic"), 1)
+        self.assertEqual(get_company_id("ANTHROPIC"), 1)
+        self.assertIsNone(get_company_id("Unknown Corp XYZ"))
 
 
 def test_url_dedup_key_is_stable_pytest():
