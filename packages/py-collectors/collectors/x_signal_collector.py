@@ -91,13 +91,9 @@ def resolve_company_id(
         if cid:
             return cid
     for name in companies:
-        cursor.execute(
-            "SELECT id FROM companies WHERE name = ? COLLATE NOCASE",
-            (name,),
-        )
-        row = cursor.fetchone()
-        if row:
-            return row[0]
+        cid = get_company_id(name)
+        if cid:
+            return cid
         cursor.execute(
             "SELECT id FROM companies WHERE LOWER(REPLACE(x_handle, '@', '')) = ?",
             (name.lstrip("@").lower(),),
@@ -271,12 +267,55 @@ def load_grok_results_from_env() -> List[Dict[str, Any]]:
     return []
 
 
+def _default_grok_results_path() -> Path:
+    raw = os.environ.get("GROK_X_RESULTS_PATH", "").strip()
+    if raw:
+        return Path(raw)
+    return Path(__file__).resolve().parents[3] / "data" / "hermes_enrich" / "grok_x_results.json"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").lower() in ("1", "true", "yes")
+
+
+def _ensure_grok_batch_file() -> Path:
+    """Fetch via xAI x_search when auto/require; never use local LLM."""
+    path = _default_grok_results_path()
+    auto = _env_flag("CI_AUTO_GROK_X")
+    require = _env_flag("CI_REQUIRE_GROK_X")
+    stale = not path.is_file() or path.stat().st_size < 50
+
+    if require and not auto and stale:
+        raise RuntimeError(
+            f"CI_REQUIRE_GROK_X: missing {path}. Run: make grok-x-fetch "
+            "(needs XAI_API_KEY). No Ollama fallback."
+        )
+
+    if (auto or require) and stale:
+        from collectors.grok_x_fetcher import fetch_and_write
+
+        max_q = int(os.environ.get("GROK_X_MAX_QUERIES", "10"))
+        logger.info("Fetching Grok X batch (max_queries=%s) → %s", max_q, path)
+        fetch_and_write(path, get_x_monitor_queries(), max_queries=max_q)
+
+    os.environ["GROK_X_RESULTS_PATH"] = str(path)
+    return path
+
+
 def run_x_collection() -> int:
     """
     Entry point for parallel_collect / daily_intel.
-    Ingests optional GROK_X_RESULTS_PATH; does not fabricate posts.
-    """
+    Ingests GROK_X_RESULTS_PATH; with CI_AUTO_GROK_X fetches via Grok x_search first.
+  """
+    try:
+        if _env_flag("CI_AUTO_GROK_X") or _env_flag("CI_REQUIRE_GROK_X"):
+            _ensure_grok_batch_file()
+    except RuntimeError as exc:
+        logger.error("%s", exc)
+        return 1
+
     total = 0
+    path = os.environ.get("GROK_X_RESULTS_PATH", "").strip()
     batches = load_grok_results_from_env()
     if batches:
         for batch in batches:
@@ -285,12 +324,25 @@ def run_x_collection() -> int:
             company_name = batch.get("company") or batch.get("company_name")
             if isinstance(results, list):
                 total += store_grok_batch(query, results, company_name=company_name)
+        logger.info("Ingested %d X posts from %s", total, path)
+    elif path:
+        logger.error(
+            "GROK_X_RESULTS_PATH is set but file missing or invalid: %s "
+            "(copy data/hermes_enrich/grok_x_results.example.json, fill from Grok, rename)",
+            path,
+        )
     else:
         logger.info(
-            "No GROK_X_RESULTS_PATH set — X collection is driven by Grok via x_monitor.process_grok_x_results()"
+            "GROK_X_RESULTS_PATH not set — enable CI_AUTO_GROK_X=1 or run: make grok-x-fetch"
         )
-        for q in X_QUERIES[:3]:
-            logger.debug("Registered X query template: %s", q[:60])
+
+    if _env_flag("CI_REQUIRE_GROK_X") and total == 0:
+        logger.error(
+            "CI_REQUIRE_GROK_X: 0 X posts ingested (path=%s). "
+            "Fix XAI_API_KEY / x_search; no local-model fallback.",
+            path or "(unset)",
+        )
+        return 1
     return total
 
 
