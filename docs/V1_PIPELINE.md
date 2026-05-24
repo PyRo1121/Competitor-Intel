@@ -8,8 +8,8 @@ One machine, one SQLite DB, one cron, one daily artifact you trust — then opti
 
 | In v1 | Out of v1 (removed) |
 |-------|---------------------|
-| `make daily-prod` → rollups → `make claims-audit-strict` | Bun API (`apps/api`), Svelte dashboard (`apps/dashboard`) |
-| Hermes / `grok_refresh` / `integrations/hermes/` | SQLAlchemy `packages/py-enterprise` stack |
+| `make daily-prod` → rollups → `make claims-audit-strict` | REST dashboard / public API (rebuild in v2) |
+| Hermes / `grok_refresh` / `integrations/hermes/` | SQLAlchemy enterprise duplicate stack |
 | `apps/cli` (`intel`, `run_intel`) | Public API auth, WAN deploy (Track 6 Phase D) |
 | `daily_brief` export | Legacy funding extractors, duplicate RSS walkers |
 | Slim collector set in `collector_registry.py` | |
@@ -65,6 +65,6 @@ make health-check
 
 ## Related docs
 
-- [ROADMAP_PRODUCTION.md](ROADMAP_PRODUCTION.md) — full audit backlog (v2+)
-- [PIPELINE.md](PIPELINE.md) — data flow
+- [README.md](README.md) — doc index
+- [SCHEDULING.md](SCHEDULING.md) — cron tiers
 - [integrations/hermes/README.md](../integrations/hermes/README.md) — Hermes entrypoints

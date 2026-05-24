@@ -41,13 +41,7 @@ from automation.collector_registry import INTEL_CLI_COLLECTORS
 COLLECTORS = INTEL_CLI_COLLECTORS
 
 REPORTS = {
-    "daily": "daily_brief.py",
-    "discord": "discord_report.py",
-    "discord_rich": "discord_reporter.py",
-    "obsidian": "generate_obsidian_notes.py",
-    "obsidian_profile": "obsidian_profile_generator.py",
-    "intel": "generate_intel_report.py",
-    "tweet": "tweet_generator.py",
+    "daily": "apps/worker/daily_brief.py",
 }
 
 

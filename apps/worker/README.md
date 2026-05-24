@@ -1,18 +1,15 @@
 # Worker
 
-Daily and frequent pipelines.
+| Script | Role |
+|--------|------|
+| `daily_intel.py` | **Canonical daily** — parallel ingest, `run_intel` schema gate, sequential rollups, brief export |
+| `frequent_intel.py` | Hourly RSS/open-web tier |
+| `grok_refresh.py` | Hermes Grok/X batch (separate cron) |
+| `daily_brief.py` | Markdown brief generation |
 
-| Entry | Role |
-|-------|------|
-| `daily_intel.py` | **Canonical** daily orchestrator |
-| `frequent_intel.py` | RSS / open-web tier |
-| `automation/` | `collector_registry.py`, `parallel_collect.py` |
+Automation: `automation/collector_registry.py`, `parallel_collect.py`, `run_utils.py`.
 
 ```bash
-uv run python apps/worker/daily_intel.py
-make daily
+make daily-prod
+make grok-refresh
 ```
-
-Do not add a second `daily_intel` under `automation/` — removed as duplicate.
-
-Docs: [docs/PIPELINE.md](../../docs/PIPELINE.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md)

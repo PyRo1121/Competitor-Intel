@@ -9,13 +9,13 @@
 - **Lint/format:** `make lint` → `make lint-py` (Ruff + ty) — see [docs/LINTING.md](docs/LINTING.md)
 - **Env:** `CI_DB_PATH`, `HERMES_AGENT_ROOT`, `CI_SKIP_GROK_X` — see `.env.example`
 - **SQLite SSOT:** `packages/py-core/db/` + [docs/SQLITE.md](docs/SQLITE.md) — always `get_conn()`, WAL, writer lock for parallel collectors
-- **Roadmap (SSOT — what to build):** `docs/ROADMAP.md` · **Doc index:** `docs/README.md`
+- **v1 north star:** `docs/V1_PIPELINE.md` · **Doc index:** `docs/README.md`
 - **Handbook:** `docs/HANDBOOK.md`
 - **Pipeline (signals + rollups):** `docs/PIPELINE.md`
 - **New session handoff:** `docs/AGENT_HANDOFF.md`
 - **Hermes integration:** `integrations/hermes/` — HTTP/CLI only, no embedded imports
 
-Legacy Hermes agent copy remains at `~/.hermes/agents/competitor_intel/` (see `MIGRATED.md`); do not edit unless migrating stragglers.
+Legacy Hermes agent copy may exist at `~/.hermes/agents/competitor_intel/`; use `integrations/hermes/call_intel.sh` only.
 
 Do not refactor Hermes agent boilerplate outside the integration shim unless asked.
 

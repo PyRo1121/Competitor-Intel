@@ -153,13 +153,10 @@ phase-a-eval: golden-eval
 
 phase-a-all: intel-all
 
-phase-a-caveats: intel-repair relink-actionable enrich-queue-export
+phase-a-caveats: intel-repair relink-actionable
 
 relink-actionable:
 	PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/relink_actionable_orphans.py
-
-enrich-queue-export:
-	PYTHONPATH=packages/py-core uv run python scripts/enrich_queue_export.py
 
 grok-x-normalize:
 	@test -n "$(INPUT)" || (echo "Usage: make grok-x-normalize INPUT=path/to/hermes_raw.json"; exit 1)
@@ -192,9 +189,6 @@ grok-x-ingest:
 
 smoke-hermes-x:
 	uv run python scripts/smoke_hermes_x_pipeline.py
-
-enrich-queue-apply:
-	PYTHONPATH=packages/py-core uv run python scripts/enrich_queue_apply.py
 
 funding-rollup:
 	PYTHONPATH=packages/py-core:packages/py-collectors uv run python packages/py-collectors/collectors/funding_rollup.py
@@ -231,26 +225,6 @@ daily-deep:
 	CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py
 
 phase-b-audit: claims-audit
-
-funding-enrich-export:
-	PYTHONPATH=packages/py-core uv run python scripts/funding_enrich_export.py
-
-funding-enrich-apply:
-	PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/funding_enrich_apply.py
-
-company-enrich-export:
-	PYTHONPATH=packages/py-core uv run python scripts/company_enrich_export.py
-
-company-enrich-apply:
-	PYTHONPATH=packages/py-core uv run python scripts/company_enrich_apply.py
-
-# Export Hermes queues (run agent on data/hermes_enrich/*.jsonl), then apply results.
-enrich-all-export: enrich-queue-export funding-enrich-export company-enrich-export
-	@echo "Next: run Hermes on data/hermes_enrich/*_queue.jsonl — then: make enrich-all-apply"
-
-enrich-all-apply: enrich-queue-apply funding-enrich-apply company-enrich-apply
-
-enrich-all: enrich-all-export
 
 migrate-db:
 	uv run python -c "from db.schema import init_database; init_database()"

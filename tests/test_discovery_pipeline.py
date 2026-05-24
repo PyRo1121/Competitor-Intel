@@ -12,7 +12,7 @@ import pytest
 def test_discovery_promote_rank_flow(operational_db, monkeypatch):
     conn = sqlite3.connect(operational_db)
     cur = conn.cursor()
-    sources = ("techcrunch", "hackernews", "rss", "producthunt", "angellist")
+    sources = ("techcrunch", "hackernews", "rss", "github")
     for i, source in enumerate(sources * 4):
         payload = {
             "title": "Nebula Labs raises $50 million in Series B funding round",

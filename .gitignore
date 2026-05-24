@@ -62,5 +62,6 @@ Thumbs.db
 coverage/
 htmlcov/
 
-# Misc
+# Misc / local experiments
+autoresearch-results/
 autoresearch-results.tsv
