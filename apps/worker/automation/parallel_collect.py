@@ -84,7 +84,9 @@ def run_parallel_collectors(
             if ok:
                 success += 1
 
-    if staging and success == len(targets) and run_id:
+    # Merge whenever staged files exist — do not require every collector to succeed.
+    # Requiring success == len(targets) dropped all JSONL from successful collectors.
+    if staging and run_id:
         merge_start = time.perf_counter()
         try:
             merge_staged_run(run_id)

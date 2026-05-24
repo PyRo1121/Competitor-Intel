@@ -35,7 +35,7 @@ def test_insert_routes_to_staging(operational_db, monkeypatch, tmp_path):
 
 
 @pytest.mark.operational
-def test_yc_collector_skips_writer_lock_when_staging(monkeypatch):
+def test_yc_collector_skips_writer_lock_when_staging(operational_db, monkeypatch):
     """JSONL staging must not hold POSIX writer_lock (blocks ingest_staging merge)."""
     monkeypatch.setenv("CI_INGEST_STAGING", "1")
     monkeypatch.setenv("CI_STAGING_RUN_ID", "yc-lock-test")
