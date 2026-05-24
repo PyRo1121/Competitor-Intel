@@ -51,7 +51,7 @@ def main() -> int:
     success = 0
     total_steps = 0
 
-    ok, elapsed = run_script("scripts/fetch_x.py", logger=logger)
+    ok, elapsed = run_script("apps/worker/x_refresh/fetch.py", logger=logger)
     timings.append((f"fetch_x_{provider}", elapsed))
     total_steps += 1
     if ok:

@@ -13,14 +13,13 @@ from urllib.parse import urlparse
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
-from db.staging import ingest_staging_active
-from db.writer_lock import writer_lock
+from db.staging import collector_write_session
 from utils.http import close_http_client, fetch_workers, parallel_map, safe_request
 
 from collectors.company_match import resolve_company_id as match_company_id
 from collectors.entity_extract import extract_entities_from_text, text_has_hype
-from collectors.signal_text import extract_company_mentions, load_company_names
 from collectors.signal_company_resolver import build_domain_index, resolve_from_url
+from collectors.signal_text import extract_company_mentions, load_company_names
 
 logger = logging.getLogger("hackernews")
 
@@ -207,14 +206,9 @@ def store_signals(stories: list[dict[str, Any]], company_names: list[str]) -> in
             count += 1
         return count
 
-    if ingest_staging_active():
+    with collector_write_session(conn):
         for story in stories:
             stored += _store_one(story)
-    else:
-        with writer_lock():
-            for story in stories:
-                stored += _store_one(story)
-        conn.commit()
     conn.close()
     logger.info("Stored %d new Hacker News signals", stored)
     return stored
@@ -359,16 +353,8 @@ def run() -> int:
             conn = get_conn()
             cursor = conn.cursor()
             try:
-                if ingest_staging_active():
-                    stored += store_algolia_show_hn(
-                        cursor, company_names, use_writer_lock=False
-                    )
-                else:
-                    with writer_lock():
-                        stored += store_algolia_show_hn(
-                            cursor, company_names, use_writer_lock=False
-                        )
-                    conn.commit()
+                with collector_write_session(conn):
+                    stored += store_algolia_show_hn(cursor, company_names, use_writer_lock=False)
             finally:
                 conn.close()
         else:

@@ -44,11 +44,16 @@ def log_pipeline_step(
 
 
 def subprocess_env(cwd: Path) -> dict[str, str]:
-    """Ensure child scripts can `import automation.*` (parallel_collect, registry)."""
+    """Ensure child scripts can import automation.*, db.*, and collectors.*."""
     env = os.environ.copy()
-    worker = str(cwd / "apps" / "worker")
+    paths = [
+        str(cwd / "apps" / "worker"),
+        str(cwd / "packages" / "py-core"),
+        str(cwd / "packages" / "py-collectors"),
+    ]
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = worker if not existing else f"{worker}{os.pathsep}{existing}"
+    prefix = os.pathsep.join(paths)
+    env["PYTHONPATH"] = prefix if not existing else f"{prefix}{os.pathsep}{existing}"
     return env
 
 

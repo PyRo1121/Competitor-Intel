@@ -21,6 +21,24 @@ def _domain(url: str | None) -> str:
         return ""
 
 
+def _claim_upsert(
+    cur: sqlite3.Cursor,
+    *,
+    exists_sql: str,
+    exists_params: tuple,
+    insert_sql: str,
+    insert_params: tuple,
+    id_sql: str,
+    id_params: tuple,
+) -> tuple[int | None, bool]:
+    cur.execute(exists_sql, exists_params)
+    existed = cur.fetchone() is not None
+    cur.execute(insert_sql, insert_params)
+    cur.execute(id_sql, id_params)
+    row = cur.fetchone()
+    return (int(row[0]) if row else None), not existed
+
+
 def upsert_profile_claim(
     conn: sqlite3.Connection,
     *,
@@ -39,13 +57,12 @@ def upsert_profile_claim(
     tier, weight, is_official = classify_source(source, source_url, company_website=company_website)
     now = datetime.now().isoformat()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT id FROM company_profile_claims WHERE source_url = ? AND field_key = ?",
-        (source_url, field_key),
-    )
-    existed = cur.fetchone() is not None
-    cur.execute(
-        """
+    lookup = (source_url, field_key)
+    return _claim_upsert(
+        cur,
+        exists_sql="SELECT id FROM company_profile_claims WHERE source_url = ? AND field_key = ?",
+        exists_params=lookup,
+        insert_sql="""
         INSERT INTO company_profile_claims (
             company_id, field_key, field_value, source, source_url,
             source_tier, source_weight, is_official, extraction_confidence,
@@ -61,7 +78,7 @@ def upsert_profile_claim(
             snippet = excluded.snippet,
             extracted_at = excluded.extracted_at
         """,
-        (
+        insert_params=(
             company_id,
             field_key,
             field_value,
@@ -77,13 +94,9 @@ def upsert_profile_claim(
             raw_signal_id,
             now,
         ),
+        id_sql="SELECT id FROM company_profile_claims WHERE source_url = ? AND field_key = ?",
+        id_params=lookup,
     )
-    cur.execute(
-        "SELECT id FROM company_profile_claims WHERE source_url = ? AND field_key = ?",
-        (source_url, field_key),
-    )
-    row = cur.fetchone()
-    return (int(row[0]) if row else None), not existed
 
 
 def upsert_team_claim(
@@ -107,13 +120,12 @@ def upsert_team_claim(
     tier, weight, is_official = classify_source(source, source_url, company_website=company_website)
     now = datetime.now().isoformat()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT id FROM team_member_claims WHERE source_url = ?",
-        (source_url,),
-    )
-    existed = cur.fetchone() is not None
-    cur.execute(
-        """
+    lookup = (source_url,)
+    return _claim_upsert(
+        cur,
+        exists_sql="SELECT id FROM team_member_claims WHERE source_url = ?",
+        exists_params=lookup,
+        insert_sql="""
         INSERT INTO team_member_claims (
             company_id, name, name_normalized, role, is_founder, joined_date,
             linkedin_url, source, source_url, source_tier, source_weight,
@@ -134,7 +146,7 @@ def upsert_team_claim(
             snippet = excluded.snippet,
             extracted_at = excluded.extracted_at
         """,
-        (
+        insert_params=(
             company_id,
             name.strip(),
             _norm_person(name),
@@ -154,10 +166,9 @@ def upsert_team_claim(
             raw_signal_id,
             now,
         ),
+        id_sql="SELECT id FROM team_member_claims WHERE source_url = ?",
+        id_params=lookup,
     )
-    cur.execute("SELECT id FROM team_member_claims WHERE source_url = ?", (source_url,))
-    row = cur.fetchone()
-    return (int(row[0]) if row else None), not existed
 
 
 def upsert_product_claim(
@@ -183,10 +194,12 @@ def upsert_product_claim(
     tier, weight, is_official = classify_source(source, source_url, company_website=company_website)
     now = datetime.now().isoformat()
     cur = conn.cursor()
-    cur.execute("SELECT id FROM product_claims WHERE source_url = ?", (source_url,))
-    existed = cur.fetchone() is not None
-    cur.execute(
-        """
+    lookup = (source_url,)
+    return _claim_upsert(
+        cur,
+        exists_sql="SELECT id FROM product_claims WHERE source_url = ?",
+        exists_params=lookup,
+        insert_sql="""
         INSERT INTO product_claims (
             company_id, name, name_normalized, description, category, status,
             product_url, launch_date, pricing_json, source, source_url,
@@ -203,7 +216,7 @@ def upsert_product_claim(
             extraction_confidence = excluded.extraction_confidence,
             extracted_at = excluded.extracted_at
         """,
-        (
+        insert_params=(
             company_id,
             name.strip(),
             _norm_product(name),
@@ -225,10 +238,9 @@ def upsert_product_claim(
             raw_signal_id,
             now,
         ),
+        id_sql="SELECT id FROM product_claims WHERE source_url = ?",
+        id_params=lookup,
     )
-    cur.execute("SELECT id FROM product_claims WHERE source_url = ?", (source_url,))
-    row = cur.fetchone()
-    return (int(row[0]) if row else None), not existed
 
 
 def upsert_license_claim(
@@ -251,10 +263,12 @@ def upsert_license_claim(
     tier, weight, is_official = classify_source(source, source_url)
     now = datetime.now().isoformat()
     cur = conn.cursor()
-    cur.execute("SELECT id FROM license_claims WHERE source_url = ?", (source_url,))
-    existed = cur.fetchone() is not None
-    cur.execute(
-        """
+    lookup = (source_url,)
+    return _claim_upsert(
+        cur,
+        exists_sql="SELECT id FROM license_claims WHERE source_url = ?",
+        exists_params=lookup,
+        insert_sql="""
         INSERT INTO license_claims (
             company_id, jurisdiction, license_type, status, regulator,
             license_number, effective_date, source, source_url,
@@ -268,7 +282,7 @@ def upsert_license_claim(
             source_weight = excluded.source_weight,
             extracted_at = excluded.extracted_at
         """,
-        (
+        insert_params=(
             company_id,
             jurisdiction,
             license_type,
@@ -287,10 +301,9 @@ def upsert_license_claim(
             intelligence_event_id,
             now,
         ),
+        id_sql="SELECT id FROM license_claims WHERE source_url = ?",
+        id_params=lookup,
     )
-    cur.execute("SELECT id FROM license_claims WHERE source_url = ?", (source_url,))
-    row = cur.fetchone()
-    return (int(row[0]) if row else None), not existed
 
 
 def _norm_person(name: str) -> str:

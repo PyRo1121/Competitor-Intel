@@ -1,12 +1,6 @@
 """Alert engine rule matching."""
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-core"))
-
-from alerts.alert_engine import (  # noqa: E402
+from alerts.alert_engine import (
     _parse_event_types,
     classify_event_type,
     match_db_rule,

@@ -4,17 +4,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import sys
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "packages" / "py-core"))
 
+from db import reprocess as rrs
 from db.connection import get_conn
 from db.migrations import apply_runtime_migrations
-from scripts import reprocess_raw_signals as rrs
 
 
 @pytest.mark.operational

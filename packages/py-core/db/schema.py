@@ -4,7 +4,6 @@ Local-first database for competitive monitoring.
 """
 
 import logging
-import os
 import sqlite3
 from pathlib import Path
 
@@ -502,36 +501,9 @@ ORDER BY rs.detected_at DESC;
 
 def ensure_raw_signals_dedup_index(conn: sqlite3.Connection) -> None:
     """Ensure UNIQUE(source, signal_type) on raw_signals; fail loud in prod modes."""
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_raw_signals_dedup'"
-    )
-    if cursor.fetchone():
-        return
-    try:
-        conn.execute(
-            "CREATE UNIQUE INDEX idx_raw_signals_dedup ON raw_signals(source, signal_type)"
-        )
-        conn.commit()
-    except sqlite3.IntegrityError as exc:
-        conn.rollback()
-        msg = (
-            "Cannot create idx_raw_signals_dedup: duplicate (source, signal_type) rows. "
-            "Run: make migrate-dedup"
-        )
-        strict = os.environ.get("CI_STRICT_PIPELINE", "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        require = os.environ.get("CI_REQUIRE_DEDUP_INDEX", "").strip().lower() in (
-            "1",
-            "true",
-            "yes",
-        )
-        if strict or require:
-            raise RuntimeError(msg) from exc
-        logger.warning("Skipped idx_raw_signals_dedup: %s", exc)
+    from db.raw_signals_dedup import ensure_raw_signals_dedup_index as _ensure
+
+    _ensure(conn)
 
 
 def init_database():

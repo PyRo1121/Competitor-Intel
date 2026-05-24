@@ -2,23 +2,40 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 from ci_paths import MONOREPO_ROOT
+from utils.env import env_default_on
 
-from db.ingest import url_dedup_key
+from db.ingest import prepare_raw_signal
 
 
 def ingest_staging_active() -> bool:
-    return os.environ.get("CI_INGEST_STAGING", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
+    """True when collector should append JSONL instead of writing SQLite."""
+    return env_default_on("CI_INGEST_STAGING", default=False)
+
+
+def staging_orchestrated() -> bool:
+    """True when parallel_collect (or similar) owns staging + merge; default ON if unset."""
+    return env_default_on("CI_INGEST_STAGING", default=True)
+
+
+@contextmanager
+def collector_write_session(conn):
+    """Run a store loop: no lock when staging JSONL; else writer_lock + commit."""
+    from db.writer_lock import writer_lock
+
+    if ingest_staging_active():
+        yield
+    else:
+        with writer_lock():
+            yield
+        conn.commit()
 
 
 def staging_run_id() -> str:
@@ -52,19 +69,23 @@ def stage_raw_signal(
     dedup_key: str | None = None,
 ) -> bool:
     """Append one signal row to per-collector JSONL (dedup at merge via INSERT OR IGNORE)."""
-    if not url and not dedup_key:
+    prepared = prepare_raw_signal(
+        source,
+        url,
+        data,
+        company_id=company_id,
+        detected_at=detected_at,
+        dedup_key=dedup_key,
+    )
+    if prepared is None:
         return False
-    key = dedup_key or url_dedup_key(url)
-    payload = dict(data)
-    payload.setdefault("url", url)
-    payload.setdefault("link", url)
     record = {
-        "source": source,
-        "url": url,
-        "company_id": company_id,
-        "detected_at": detected_at,
-        "dedup_key": key,
-        "data": payload,
+        "source": prepared.source,
+        "url": prepared.url,
+        "company_id": prepared.company_id,
+        "detected_at": prepared.detected_at,
+        "dedup_key": prepared.signal_type,
+        "data": prepared.payload,
     }
     path = staging_file_path()
     line = json.dumps(record, ensure_ascii=False, separators=(",", ":"))
@@ -94,44 +115,50 @@ def clear_staging_run(run_id: str) -> None:
     run_dir = staging_run_dir(run_id)
     for path in run_dir.glob("*.jsonl"):
         path.unlink(missing_ok=True)
-    try:
+    with contextlib.suppress(OSError):
         run_dir.rmdir()
-    except OSError:
-        pass
 
 
 def merge_staged_run(run_id: str) -> dict[str, int]:
     """Merge staged JSONL into raw_signals (single writer_lock + batch insert)."""
+    import logging
+
     from db.batch import RawSignalBatchWriter
     from db.writer_lock import writer_lock
 
+    logger = logging.getLogger("db.staging")
     paths = list_staging_files(run_id)
     if not paths:
+        logger.warning("No staging files for run_id=%s", run_id)
         return {"files": 0, "rows": 0, "inserted": 0}
 
     rows = 0
     inserted = 0
     commit_every = max(100, int(os.environ.get("CI_SQLITE_BATCH_COMMIT", "500")))
 
-    with writer_lock():
-        with RawSignalBatchWriter(
+    with (
+        writer_lock(),
+        RawSignalBatchWriter(
             commit_every=commit_every,
             profile="ingest_bulk",
             use_writer_lock=False,
-        ) as batch:
-            for record in iter_staged_records(run_id):
-                rows += 1
-                if batch.insert(
-                    record["source"],
-                    record.get("url") or "",
-                    record["data"],
-                    company_id=record.get("company_id"),
-                    detected_at=record.get("detected_at"),
-                    dedup_key=record.get("dedup_key"),
-                ):
-                    inserted += 1
+        ) as batch,
+    ):
+        for record in iter_staged_records(run_id):
+            rows += 1
+            if batch.insert(
+                record["source"],
+                record.get("url") or "",
+                record["data"],
+                company_id=record.get("company_id"),
+                detected_at=record.get("detected_at"),
+                dedup_key=record.get("dedup_key"),
+            ):
+                inserted += 1
 
-    return {"files": len(paths), "rows": rows, "inserted": inserted}
+    summary = {"files": len(paths), "rows": rows, "inserted": inserted}
+    logger.info("Staging merge complete: %s", summary)
+    return summary
 
 
 # Back-compat alias used by ingest_staging CLI

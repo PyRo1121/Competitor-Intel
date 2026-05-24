@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-import sys
 from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-core"))
-
-from db.schema import ensure_raw_signals_dedup_index  # noqa: E402
+from db.schema import ensure_raw_signals_dedup_index
 
 
 def _db_with_duplicate_rows(path: Path) -> sqlite3.Connection:

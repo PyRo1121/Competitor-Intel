@@ -214,18 +214,12 @@ CREATE TABLE raw_signals (
 
 def apply_claims_ingest_schema(conn: sqlite3.Connection) -> None:
     """Companies + claim tables + collector raw_signals (bulk extract tests)."""
-    conn.executescript(
-        COMPANIES_MINIMAL_SQL + CLAIM_TABLES_SQL + RAW_SIGNALS_COLLECTOR_SQL
-    )
+    conn.executescript(COMPANIES_MINIMAL_SQL + CLAIM_TABLES_SQL + RAW_SIGNALS_COLLECTOR_SQL)
 
 
 def apply_company_data_schema(conn: sqlite3.Connection) -> None:
     """Full company-data rollup schema (profile/team/product aggregators)."""
-    conn.executescript(
-        COMPANIES_FULL_SQL
-        + CLAIM_TABLES_SQL
-        + COMPANY_DATA_AGGREGATE_SQL
-    )
+    conn.executescript(COMPANIES_FULL_SQL + CLAIM_TABLES_SQL + COMPANY_DATA_AGGREGATE_SQL)
 
 
 def apply_events_extract_schema(conn: sqlite3.Connection) -> None:

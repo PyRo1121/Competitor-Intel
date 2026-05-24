@@ -12,7 +12,13 @@ from utils.http import post_json
 
 logger = logging.getLogger("ollama_client")
 
-OLLAMA_BASE = os.getenv("CI_OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+
+def _ollama_base() -> str:
+    host = os.getenv("CI_OLLAMA_HOST") or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    return host.rstrip("/")
+
+
+OLLAMA_BASE = _ollama_base()
 OLLAMA_GENERATE_URL = f"{OLLAMA_BASE}/api/generate"
 
 

@@ -8,6 +8,8 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from db.staging import clear_staging_run, merge_staged_run, staging_orchestrated
+
 from automation.collector_registry import (
     BASE,
     DAILY_NO_X_PARALLEL_COLLECTORS,
@@ -19,18 +21,9 @@ from automation.run_utils import configure_logging, log_timings, run_script
 logger = logging.getLogger("parallel_collect")
 
 
-def _staging_enabled() -> bool:
-    return os.environ.get("CI_INGEST_STAGING", "1").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-        "off",
-    )
-
-
 def _max_parallel() -> int:
     """Collector subprocesses; default 4 when staging (no DB writes in collectors)."""
-    default = "4" if _staging_enabled() else "3"
+    default = "4" if staging_orchestrated() else "3"
     raw = os.environ.get("CI_PARALLEL_COLLECTORS", default).strip()
     try:
         return max(1, min(6, int(raw)))
@@ -59,7 +52,7 @@ def run_parallel_collectors(
     batch_start = time.perf_counter()
 
     workers = _max_parallel()
-    staging = _staging_enabled()
+    staging = staging_orchestrated()
     run_id = os.environ.get("CI_STAGING_RUN_ID", "").strip()
     if staging and not run_id:
         run_id = uuid.uuid4().hex[:12]
@@ -92,15 +85,22 @@ def run_parallel_collectors(
                 success += 1
 
     if staging and success == len(targets) and run_id:
-        merge_ok, merge_elapsed = run_script(
-            "apps/worker/ingest_staging.py",
-            "--run-id",
-            run_id,
-            cwd=BASE,
-            logger=logger,
-            step_id="ingest_staging",
-        )
-        timings.append(("ingest_staging", merge_elapsed))
+        merge_start = time.perf_counter()
+        try:
+            merge_staged_run(run_id)
+            keep = os.environ.get("CI_STAGING_KEEP", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            if not keep:
+                clear_staging_run(run_id)
+            merge_ok = True
+        except Exception:
+            logger.exception("Staging merge failed for run_id=%s", run_id)
+            merge_ok = False
+        timings.append(("ingest_staging", time.perf_counter() - merge_start))
         if not merge_ok:
             success = max(0, success - 1)
 

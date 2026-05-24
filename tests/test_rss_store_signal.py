@@ -3,14 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
-import sys
-from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-core"))
-sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
-
-from collectors.rss_collector import store_signal  # noqa: E402
+from collectors.rss_collector import store_signal
 
 
 def _entry(*, high_signal: bool, mentions: list[str] | None = None) -> dict:

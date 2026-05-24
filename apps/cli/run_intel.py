@@ -12,7 +12,6 @@ import logging
 import sqlite3
 import sys
 import time
-from pathlib import Path
 
 from ci_paths import MONOREPO_ROOT, ensure_app_paths
 

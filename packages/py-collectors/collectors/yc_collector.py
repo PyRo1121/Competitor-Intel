@@ -10,8 +10,7 @@ from typing import Any
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
-from db.staging import ingest_staging_active
-from db.writer_lock import writer_lock
+from db.staging import collector_write_session
 from utils.http import close_http_client, safe_request
 
 from collectors.company_match import resolve_company_id
@@ -90,12 +89,8 @@ def run_yc_collector() -> int:
             ):
                 inserted += 1
 
-    if ingest_staging_active():
+    with collector_write_session(conn):
         _ingest_rows()
-    else:
-        with writer_lock():
-            _ingest_rows()
-            conn.commit()
     conn.close()
     logger.info("YC collector stored %s signals", inserted)
     return inserted

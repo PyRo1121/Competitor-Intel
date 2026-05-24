@@ -4,20 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import sys
 from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-core"))
-sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
-
-from collectors.intel_quality_gate import (  # noqa: E402
+from collectors.intel_quality_gate import (
     check_metrics,
     collect_metrics,
 )
-from db.schema import init_database  # noqa: E402
+from db.schema import init_database
 
 
 def _seed_healthy_db(path: Path) -> None:

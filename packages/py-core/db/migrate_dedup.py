@@ -1,90 +1,28 @@
 #!/usr/bin/env python3
+"""CLI: dedupe raw_signals rows and ensure unique (source, signal_type) index."""
+
+from __future__ import annotations
+
 import argparse
 import logging
-import sqlite3
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from db.connection import DB_PATH, get_conn
+from db.raw_signals_dedup import (
+    INDEX_NAME,
+    count_duplicate_groups,
+    count_rows_to_delete,
+    dedupe_raw_signals,
+    ensure_dedup_index,
+)
 
 logger = logging.getLogger("migrate_dedup")
-INDEX_NAME = "idx_raw_signals_dedup"
 
 
-def count_duplicate_groups(cursor: sqlite3.Cursor) -> int:
-    cursor.execute(
-        """
-        SELECT COUNT(*) FROM (
-            SELECT source, signal_type
-            FROM raw_signals
-            GROUP BY source, signal_type
-            HAVING COUNT(*) > 1
-        )
-        """
-    )
-    return int(cursor.fetchone()[0])
-
-
-def count_rows_to_delete(cursor: sqlite3.Cursor) -> int:
-    cursor.execute(
-        """
-        SELECT COUNT(*) FROM raw_signals
-        WHERE id NOT IN (
-            SELECT MAX(id) FROM raw_signals GROUP BY source, signal_type
-        )
-        """
-    )
-    return int(cursor.fetchone()[0])
-
-
-def dedupe_raw_signals(conn: sqlite3.Connection) -> int:
-    cursor = conn.cursor()
-    before = count_rows_to_delete(cursor)
-    if before == 0:
-        logger.info("No duplicate (source, signal_type) rows to remove")
-        return 0
-    cursor.execute(
-        """
-        DELETE FROM raw_signals
-        WHERE id NOT IN (
-            SELECT MAX(id) FROM raw_signals GROUP BY source, signal_type
-        )
-        """
-    )
-    conn.commit()
-    logger.info("Removed %s duplicate raw_signals rows", before)
-    return before
-
-
-def ensure_dedup_index(conn: sqlite3.Connection) -> bool:
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?",
-        (INDEX_NAME,),
-    )
-    if cursor.fetchone():
-        logger.info("Index %s already exists", INDEX_NAME)
-        return True
-    try:
-        conn.execute(f"CREATE UNIQUE INDEX {INDEX_NAME} ON raw_signals(source, signal_type)")
-        conn.commit()
-        logger.info("Created unique index %s", INDEX_NAME)
-        return True
-    except sqlite3.IntegrityError as exc:
-        conn.rollback()
-        groups = count_duplicate_groups(conn.cursor())
-        logger.error(
-            "Cannot create %s: %s duplicate groups remain (%s)",
-            INDEX_NAME,
-            groups,
-            exc,
-        )
-        return False
-
-
-def verify_index(cursor: sqlite3.Cursor) -> bool:
+def verify_index(cursor) -> bool:
     cursor.execute(
         "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?",
         (INDEX_NAME,),

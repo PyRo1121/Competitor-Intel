@@ -15,7 +15,6 @@ from ci_paths import MONOREPO_ROOT, ensure_app_paths
 ensure_app_paths()
 
 from automation.collector_registry import get_daily_sequential
-from automation.pipeline_runner import _abort_unless_force  # re-export for tests
 from automation.pipeline_runner import run_pipeline
 from automation.run_utils import configure_logging, log_timings, run_script
 
@@ -118,12 +117,17 @@ def main() -> int:
             "no",
             "off",
         ):
-            ok_bk, elapsed_bk = run_script(
-                "scripts/sqlite_health.py",
-                "--backup",
-                logger=logger,
-                step_id="sqlite_backup",
-            )
+            started_bk = time.perf_counter()
+            try:
+                from db.health import backup_db
+
+                out = backup_db()
+                logger.info("Post-daily sqlite backup: %s", out)
+                ok_bk = True
+            except Exception as exc:
+                logger.warning("Post-daily sqlite backup failed: %s", exc)
+                ok_bk = False
+            elapsed_bk = time.perf_counter() - started_bk
             timings.append(("sqlite_backup", elapsed_bk))
             if not ok_bk:
                 logger.warning("Post-daily sqlite backup failed (non-fatal)")

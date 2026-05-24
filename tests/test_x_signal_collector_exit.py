@@ -8,8 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 COLLECTOR = ROOT / "packages" / "py-collectors" / "collectors" / "x_signal_collector.py"
 

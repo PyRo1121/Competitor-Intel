@@ -3,23 +3,11 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
-
-from monorepo_env import bootstrap_monorepo
+from cron_runner import run_job
 
 
 def main() -> int:
-    root = bootstrap_monorepo()
-    env = os.environ.copy()
-    env["CI_SKIP_GROK_X"] = "1"
-    env["CI_STRICT_PIPELINE"] = "1"
-    env["CI_REQUIRE_DEDUP_INDEX"] = "1"
-    script = root / "apps" / "worker" / "daily_intel.py"
-    result = subprocess.run([sys.executable, str(script)], cwd=root, env=env)
-    print(f"competitor-intel daily-prod: exit {result.returncode}")
-    return result.returncode
+    return run_job("daily-prod")
 
 
 if __name__ == "__main__":

@@ -9,6 +9,7 @@ import sqlite3
 import sys
 import urllib.error
 import urllib.request
+from datetime import UTC
 from pathlib import Path
 
 from ci_paths import db_path, ensure_app_paths
@@ -61,7 +62,7 @@ def _api_checks(api_url: str, timeout: int, max_freshness_hours: str | None) -> 
             "queriedAt" in status and isinstance(status.get("counts"), dict),
         )
         if max_freshness_hours and ok:
-            from datetime import datetime, timedelta, timezone
+            from datetime import datetime, timedelta
 
             last = (status.get("freshness") or {}).get("lastSignalAt")
             if not last:
@@ -69,8 +70,8 @@ def _api_checks(api_url: str, timeout: int, max_freshness_hours: str | None) -> 
             else:
                 ts = datetime.fromisoformat(last.replace("Z", "+00:00"))
                 if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-                age = datetime.now(timezone.utc) - ts
+                    ts = ts.replace(tzinfo=UTC)
+                age = datetime.now(UTC) - ts
                 ok &= _check(
                     f"api signal freshness (<={max_freshness_hours}h)",
                     age <= timedelta(hours=float(max_freshness_hours)),

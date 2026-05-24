@@ -5,17 +5,19 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
+from ci_paths import MONOREPO_ROOT, ensure_app_paths
+
+ensure_app_paths()
 
 from collectors.x_query_builder import load_queries_file  # noqa: E402
 from collectors.xurl_fetcher import check_xurl_ready, fetch_and_write  # noqa: E402
 
-OUT = ROOT / "data" / "hermes_enrich" / "grok_x_results.json"
-QUERIES_FILE = ROOT / "data" / "hermes_enrich" / "x_monitor_queries.json"
+OUT = MONOREPO_ROOT / "data" / "hermes_enrich" / "grok_x_results.json"
+QUERIES_FILE = MONOREPO_ROOT / "data" / "hermes_enrich" / "x_monitor_queries.json"
 
 
 def main() -> int:
@@ -24,13 +26,13 @@ def main() -> int:
     parser.add_argument(
         "--max-queries",
         type=int,
-        default=int(__import__("os").environ.get("XURL_MAX_QUERIES", "10")),
+        default=int(os.environ.get("XURL_MAX_QUERIES", "10")),
         help="Limit global queries (default 10; use 1 for smoke)",
     )
     parser.add_argument(
         "--max-results",
         type=int,
-        default=int(__import__("os").environ.get("XURL_SEARCH_N", "10")),
+        default=int(os.environ.get("XURL_SEARCH_N", "10")),
         help="Posts per query (default 10)",
     )
     parser.add_argument("-o", "--output", type=Path, default=OUT)

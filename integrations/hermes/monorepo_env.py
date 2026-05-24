@@ -16,21 +16,10 @@ def monorepo_root() -> Path:
 
 def bootstrap_monorepo() -> Path:
     root = monorepo_root()
-    os.chdir(root)
-    env_file = root / ".env"
-    if env_file.is_file():
-        from dotenv import load_dotenv
+    py_core = str(root / "packages" / "py-core")
+    if py_core not in sys.path:
+        sys.path.insert(0, py_core)
+    from ci_paths import bootstrap_external_runner  # noqa: PLC0415
 
-        load_dotenv(env_file)
-    os.environ.setdefault("CI_DB_PATH", str(root / "data" / "competitor_intel.db"))
-    for sub in (
-        "packages/py-core",
-        "packages/py-collectors",
-        "apps/worker",
-        "apps/cli",
-    ):
-        path = str(root / sub)
-        if path not in sys.path:
-            sys.path.insert(0, path)
-    (root / "logs").mkdir(exist_ok=True)
-    return root
+    os.environ.setdefault("COMPETITOR_INTEL_ROOT", str(root))
+    return bootstrap_external_runner()

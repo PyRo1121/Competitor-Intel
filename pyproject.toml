@@ -68,10 +68,11 @@ root = [
     "apps/cli",
     "tests",
     "scripts",
+    "integrations",
 ]
 
 [tool.ty.src]
-include = ["packages", "apps/worker", "apps/cli", "tests", "scripts"]
+include = ["packages", "apps/worker", "apps/cli", "tests", "scripts", "integrations"]
 
 [tool.ty.analysis]
 allowed-unresolved-imports = [
@@ -81,6 +82,8 @@ allowed-unresolved-imports = [
     "tools.x_search_tool",
     "scripts",
     "scripts.**",
+    "tests.fixtures.**",
+    "integrations.**",
 ]
 
 [[tool.ty.overrides]]

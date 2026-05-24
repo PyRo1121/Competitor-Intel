@@ -4,20 +4,14 @@ High-throughput ingest helpers — one connection, batched commits, prepared INS
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from datetime import datetime
 from typing import Any
 
 from db.connection import get_conn
-from db.ingest import url_dedup_key
+from db.ingest import RAW_SIGNAL_INSERT_SQL, prepare_raw_signal
 from db.sqlite_tuning import ProfileName
 from db.writer_lock import writer_lock
-
-_RAW_SIGNAL_INSERT = """
-INSERT OR IGNORE INTO raw_signals (company_id, source, signal_type, data_json, detected_at)
-VALUES (?, ?, ?, ?, ?)
-"""
 
 
 class RawSignalBatchWriter:
@@ -51,16 +45,26 @@ class RawSignalBatchWriter:
         detected_at: str | None = None,
         dedup_key: str | None = None,
     ) -> bool:
-        if not url and not dedup_key:
+        prepared = prepare_raw_signal(
+            source,
+            url,
+            data,
+            company_id=company_id,
+            detected_at=detected_at,
+            dedup_key=dedup_key,
+            default_detected_at=self._detected_default,
+        )
+        if prepared is None:
             return False
-        key = dedup_key or url_dedup_key(url)
-        payload = dict(data)
-        payload.setdefault("url", url)
-        payload.setdefault("link", url)
-        ts = detected_at or self._detected_default
         self._cursor.execute(
-            _RAW_SIGNAL_INSERT,
-            (company_id, source, key, json.dumps(payload), ts),
+            RAW_SIGNAL_INSERT_SQL,
+            (
+                prepared.company_id,
+                prepared.source,
+                prepared.signal_type,
+                prepared.data_json,
+                prepared.detected_at,
+            ),
         )
         ok = self._cursor.rowcount > 0
         if ok:

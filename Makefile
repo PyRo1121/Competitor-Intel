@@ -50,16 +50,16 @@ grok-refresh:
 full-sweep:
 	@echo "=== Full sweep: daily (no X) → enriched X queries → grok-refresh → funding rollup ==="
 	CI_COMPANY_DATA_ROLLUP=1 CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py
-	uv run python scripts/export_x_monitor_queries.py --enriched
+	uv run python -m collectors.grok_x_export export --enriched
 	CI_X_PROVIDER=grok CI_X_QUERY_AI_EXPAND=1 GROK_X_MAX_QUERIES=18 $(MAKE) grok-refresh
 	PYTHONPATH=packages/py-core:packages/py-collectors uv run python packages/py-collectors/collectors/funding_rollup.py
 
 # Static registry queries only (grok cron before daily has run).
 export-x-queries:
-	uv run python scripts/export_x_monitor_queries.py --baseline-only
+	uv run python -m collectors.grok_x_export export --baseline-only
 
 export-x-queries-enriched:
-	uv run python scripts/export_x_monitor_queries.py --enriched
+	uv run python -m collectors.grok_x_export export --enriched
 
 daily-tiered:
 	CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py
@@ -93,7 +93,7 @@ test-all:
 	uv run pytest tests/
 
 reprocess-signals:
-	uv run python scripts/reprocess_raw_signals.py --dry-run
+	uv run python -m db.reprocess --dry-run
 
 intel-repair:
 	PYTHONPATH=packages/py-core:packages/py-collectors uv run python packages/py-collectors/collectors/signal_repair.py
@@ -102,13 +102,13 @@ migrate-dedup:
 	uv run python packages/py-core/db/migrate_dedup.py
 
 sqlite-health:
-	uv run python scripts/sqlite_health.py
+	uv run python -m db.health
 
 sqlite-checkpoint:
-	uv run python scripts/sqlite_health.py --checkpoint TRUNCATE
+	uv run python -m db.health --checkpoint TRUNCATE
 
 sqlite-backup:
-	uv run python scripts/sqlite_health.py --backup
+	uv run python -m db.health --backup
 
 intel-gate:
 	PYTHONPATH=packages/py-core:packages/py-collectors uv run python packages/py-collectors/collectors/intel_quality_gate.py
@@ -118,13 +118,25 @@ phase-a-repair: intel-repair
 phase-a-gate: intel-gate
 
 golden-eval:
-	PYTHONPATH=packages/py-collectors uv run python scripts/eval_golden_set.py
+	PYTHONPATH=packages/py-core:packages/py-collectors uv run python tests/tools/golden_eval.py
 
 export-ingest-catalog:
-	PYTHONPATH=packages/py-collectors uv run python scripts/export_ingest_catalog.py
+	PYTHONPATH=packages/py-core:packages/py-collectors uv run python -m collectors.ingest_catalog
 
 # Production verification bar (see docs/PIPELINE.md, docs/ENGINEERING.md)
 verify: compile test-cov intel-gate golden-eval claims-audit-strict
+
+CI_DB_PATH ?= $(ROOT)/data/ci_test.db
+
+migrate-db-ci:
+	CI_DB_PATH="$(CI_DB_PATH)" uv run python -c "from db.schema import init_database; init_database()"
+
+daily-dry-run-ci:
+	CI_SKIP_GROK_X=1 CI_DB_PATH="$(CI_DB_PATH)" uv run python apps/worker/daily_intel.py --dry-run
+
+ci: lock-check supply-chain-py lint-py migrate-db-ci compile
+	CI_DB_PATH="$(CI_DB_PATH)" $(MAKE) test-cov intel-gate golden-eval claims-audit-strict
+	$(MAKE) daily-dry-run-ci CI_DB_PATH="$(CI_DB_PATH)"
 
 verify-dry-run: verify
 	CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py --dry-run
@@ -160,26 +172,26 @@ phase-a-all: intel-all
 phase-a-caveats: intel-repair relink-actionable
 
 relink-actionable:
-	PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/relink_actionable_orphans.py
+	PYTHONPATH=packages/py-core:packages/py-collectors uv run python packages/py-collectors/collectors/signal_repair.py actionable
 
 grok-x-normalize:
 	@test -n "$(INPUT)" || (echo "Usage: make grok-x-normalize INPUT=path/to/hermes_raw.json"; exit 1)
-	uv run python scripts/grok_x_normalize.py "$(INPUT)" -o data/hermes_enrich/grok_x_results.json
+	uv run python -m collectors.grok_x_export normalize "$(INPUT)" -o data/hermes_enrich/grok_x_results.json
 
 grok-x-fetch:
-	PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/fetch_x.py
+	uv run python apps/worker/x_refresh/fetch.py
 
 grok-x-fetch-smoke:
-	GROK_X_MAX_QUERIES=1 PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/fetch_x.py --max-queries 1
+	GROK_X_MAX_QUERIES=1 uv run python apps/worker/x_refresh/fetch.py --max-queries 1
 
 x-check:
-	PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/fetch_xurl.py --check
+	uv run python apps/worker/x_refresh/fetch_xurl.py --check
 
 x-fetch:
-	PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/fetch_xurl.py
+	uv run python apps/worker/x_refresh/fetch_xurl.py
 
 x-fetch-smoke:
-	XURL_MAX_QUERIES=1 PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/fetch_xurl.py --max-queries 1
+	XURL_MAX_QUERIES=1 uv run python apps/worker/x_refresh/fetch_xurl.py --max-queries 1
 
 grok-x-ingest:
 	@test -f data/hermes_enrich/grok_x_results.json || (echo "Missing data/hermes_enrich/grok_x_results.json — run: make grok-x-fetch"; exit 1)
@@ -192,7 +204,7 @@ grok-x-ingest:
 	PYTHONPATH=packages/py-core:packages/py-collectors uv run python packages/py-collectors/collectors/funding_rollup.py
 
 smoke-hermes-x:
-	uv run python scripts/smoke_hermes_x_pipeline.py
+	uv run python tests/integration/smoke_hermes_x_pipeline.py
 
 funding-rollup:
 	PYTHONPATH=packages/py-core:packages/py-collectors uv run python packages/py-collectors/collectors/funding_rollup.py
@@ -220,10 +232,10 @@ phase-b-company: company-data-rollup
 phase-b-all: rollup-all
 
 claims-audit:
-	CI_DB_PATH="$(CI_DB_PATH)" PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/claims_audit.py
+	CI_DB_PATH="$(CI_DB_PATH)" uv run python -m db.claims_audit
 
 claims-audit-strict:
-	CI_CLAIMS_AUDIT_STRICT=1 CI_DB_PATH="$(CI_DB_PATH)" PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/claims_audit.py
+	CI_CLAIMS_AUDIT_STRICT=1 CI_DB_PATH="$(CI_DB_PATH)" uv run python -m db.claims_audit
 
 daily-deep:
 	CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py

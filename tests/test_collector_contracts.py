@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import httpx
 import respx
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-core"))
-sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
-
-from collectors.hackernews_collector import fetch_story, fetch_story_ids  # noqa: E402
-from collectors.signal_text import extract_company_mentions  # noqa: E402
-from utils.http import fetch_text  # noqa: E402
+from collectors.hackernews_collector import fetch_story, fetch_story_ids
+from collectors.signal_text import extract_company_mentions
+from utils.http import fetch_text
 
 SAMPLE_RSS = """<?xml version="1.0"?>
 <rss><channel><item>

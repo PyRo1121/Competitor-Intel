@@ -24,7 +24,7 @@ Symlinks at repo root: `collectors` → `packages/py-collectors/collectors`, `au
 1. `parallel_collect.py` — RSS/open-web ingest (`CI_SKIP_GROK_X=1` on `daily-prod`)
 2. `run_intel.py` — schema check only (extraction scripts empty; use `signal_processor` in sequential)
 3. Sequential steps from `collector_registry.get_daily_sequential()` — processor, rollups, `daily_brief --export`
-4. Separate cron: `grok_refresh.py` → `scripts/fetch_x.py` → `x_signal_collector`
+4. Separate cron: `grok_refresh.py` → `x_refresh/fetch.py` → `x_signal_collector`
 
 **Canonical entry:** `apps/worker/daily_intel.py` only.
 

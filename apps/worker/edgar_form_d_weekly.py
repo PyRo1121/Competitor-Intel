@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 
 from ci_paths import ensure_app_paths
 

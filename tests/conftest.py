@@ -12,10 +12,18 @@ PY_CORE = ROOT / "packages" / "py-core"
 PY_COLLECTORS = ROOT / "packages" / "py-collectors"
 WORKER = ROOT / "apps" / "worker"
 
-for path in (PY_CORE, PY_COLLECTORS, WORKER):
+for path in (ROOT, PY_CORE, PY_COLLECTORS, WORKER):
     path_str = str(path)
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_staging_env(monkeypatch):
+    """Prevent CI_INGEST_STAGING leakage across tests (order-dependent failures)."""
+    monkeypatch.delenv("CI_INGEST_STAGING", raising=False)
+    monkeypatch.delenv("CI_STAGING_RUN_ID", raising=False)
+    monkeypatch.delenv("CI_STAGING_SLOT", raising=False)
 
 
 @pytest.fixture()

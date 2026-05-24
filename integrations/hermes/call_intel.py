@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
             "x-fetch",
             "x-check",
             "export-x-queries",
+            "edgar-weekly",
         ),
     )
     parser.add_argument("rest", nargs=argparse.REMAINDER)
@@ -74,23 +75,10 @@ def main(argv: list[str] | None = None) -> int:
             "apps/worker/daily_intel.py",
             env={"CI_SKIP_GROK_X": "1"},
         )
-    if mode == "daily-prod":
-        return _run(
-            root,
-            "apps/worker/daily_intel.py",
-            env={
-                "CI_SKIP_GROK_X": "1",
-                "CI_STRICT_PIPELINE": "1",
-                "CI_REQUIRE_DEDUP_INDEX": "1",
-            },
-        )
-    if mode == "frequent":
-        return _run(root, "apps/worker/frequent_intel.py")
-    if mode == "grok-refresh":
-        if _hermes_disabled():
-            print("Hermes/Grok skipped (CI_DISABLE_HERMES or CI_SKIP_GROK_X)", file=sys.stderr)
-            return 0
-        return _run(root, "apps/worker/grok_refresh.py")
+    if mode in ("daily-prod", "frequent", "grok-refresh", "edgar-weekly"):
+        from cron_runner import run_job  # noqa: PLC0415
+
+        return run_job(mode, root=root)
     if mode == "full-sweep":
         return _run_make(root, "full-sweep")
     if mode == "grok-x-ingest":
@@ -102,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     if mode == "companies":
         limit = rest[0] if rest else "20"
         return _run(root, "apps/cli/intel.py", "companies", "--limit", limit)
-    if mode in ("grok-x", "grok-ingest"):
+    if mode == "grok-x":
         if _hermes_disabled():
             print("Hermes/Grok skipped (CI_DISABLE_HERMES or CI_SKIP_GROK_X)", file=sys.stderr)
             return 0
@@ -111,13 +99,19 @@ def main(argv: list[str] | None = None) -> int:
         if _hermes_disabled():
             print("Hermes/Grok skipped (CI_DISABLE_HERMES or CI_SKIP_GROK_X)", file=sys.stderr)
             return 0
-        return _run(root, "scripts/fetch_x.py", *rest)
+        return _run(root, "apps/worker/x_refresh/fetch.py", *rest)
     if mode == "x-fetch":
-        return _run(root, "scripts/fetch_xurl.py", *rest)
+        return _run(root, "apps/worker/x_refresh/fetch_xurl.py", *rest)
     if mode == "x-check":
-        return _run(root, "scripts/fetch_xurl.py", "--check")
+        return _run(root, "apps/worker/x_refresh/fetch_xurl.py", "--check")
     if mode == "export-x-queries":
-        return _run(root, "scripts/export_x_monitor_queries.py", *rest)
+        cmd = [sys.executable, "-m", "collectors.grok_x_export", "export", *rest]
+        merged = os.environ.copy()
+        py = str(root / "packages" / "py-collectors")
+        merged["PYTHONPATH"] = (
+            py if not merged.get("PYTHONPATH") else f"{py}{os.pathsep}{merged['PYTHONPATH']}"
+        )
+        return subprocess.run(cmd, cwd=root, env=merged).returncode
     return 1
 
 

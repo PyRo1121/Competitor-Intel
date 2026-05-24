@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "apps" / "worker"))
 
-from automation.collector_registry import (  # noqa: E402
+from automation.collector_registry import (
     DAILY_NO_X_PARALLEL_COLLECTORS,
     GROK_COLLECTORS,
     INTEL_CLI_COLLECTORS,
@@ -41,8 +39,9 @@ def test_intel_cli_paths_exist():
 
 
 def test_daily_no_x_parallel_is_parallel_minus_x():
-    assert DAILY_NO_X_PARALLEL_COLLECTORS == tuple(
-        s for s in PARALLEL_COLLECTORS if s != "collectors/x_signal_collector.py"
+    assert (
+        tuple(s for s in PARALLEL_COLLECTORS if s != "collectors/x_signal_collector.py")
+        == DAILY_NO_X_PARALLEL_COLLECTORS
     )
 
 

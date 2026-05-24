@@ -20,7 +20,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from db.connection import get_conn
 from utils.http import post_json
 
-OLLAMA_BASE = os.getenv("CI_OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+OLLAMA_BASE = (
+    os.getenv("CI_OLLAMA_HOST") or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+).rstrip("/")
 OLLAMA_EMBED_URL = f"{OLLAMA_BASE}/api/embed"
 OLLAMA_EMBEDDINGS_URL = f"{OLLAMA_BASE}/api/embeddings"
 EMBED_MODEL = "nomic-embed-text"

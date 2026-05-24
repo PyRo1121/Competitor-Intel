@@ -8,13 +8,19 @@ import logging
 from db.connection import get_conn
 from db.migrations import apply_runtime_migrations
 
+from collectors.signal_company_resolver import (
+    build_domain_index,
+    resolve_company_enhanced,
+)
 from collectors.signal_processor import (
     UNLABELED_EVENT_TYPE,
     classify_for_storage,
     extract_amount,
     extract_signal_text,
+    fuzzy_match_company,
     parse_signal_data,
     relink_orphan_companies,
+    resolve_company_from_data,
 )
 
 logger = logging.getLogger("signal_repair")
@@ -291,6 +297,76 @@ def ensure_indexes(conn) -> int:
     return 1
 
 
+def relink_actionable_orphans(batch_size: int = 500) -> dict[str, int]:
+    """Relink events whose text names a tracked company but company_id is null."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT LOWER(name) FROM companies WHERE LENGTH(name) >= 4")
+    names = [r[0] for r in cur.fetchall()]
+    if not names:
+        conn.close()
+        return {"candidates": 0, "updated": 0}
+
+    cur.execute(
+        """
+        SELECT ie.id, ie.description, rs.data_json
+        FROM intelligence_events ie
+        LEFT JOIN raw_signals rs ON rs.id = ie.raw_signal_id
+        WHERE ie.company_id IS NULL
+        LIMIT ?
+        """,
+        (batch_size * 3,),
+    )
+    rows = cur.fetchall()
+    domain_index = build_domain_index(cur)
+    updated = 0
+    candidates = 0
+
+    for event_id, description, data_json in rows:
+        blob = (description or "").lower()
+        data = parse_signal_data(data_json)
+        blob += (
+            " "
+            + " ".join(
+                str(data.get(k, ""))
+                for k in ("title", "headline", "description", "summary", "content")
+            ).lower()
+        )
+        if not any(n in blob for n in names):
+            continue
+        candidates += 1
+        matched = resolve_company_enhanced(
+            data,
+            cur,
+            domain_index=domain_index,
+            fuzzy_match_fn=fuzzy_match_company,
+            resolve_from_data_fn=resolve_company_from_data,
+        )
+        if not matched:
+            continue
+        cid = matched[0]
+        cur.execute(
+            "UPDATE intelligence_events SET company_id = ? WHERE id = ?",
+            (cid, event_id),
+        )
+        if data_json:
+            cur.execute(
+                """
+                UPDATE raw_signals SET company_id = ?
+                WHERE id = (SELECT raw_signal_id FROM intelligence_events WHERE id = ?)
+                  AND company_id IS NULL
+                """,
+                (cid, event_id),
+            )
+        updated += 1
+        if updated >= batch_size:
+            break
+
+    conn.commit()
+    conn.close()
+    return {"candidates": candidates, "updated": updated}
+
+
 def run() -> dict[str, int]:
     conn = get_conn()
     apply_runtime_migrations(conn)
@@ -321,8 +397,15 @@ def run() -> dict[str, int]:
     return stats
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import sys
+
+    args = list(argv or sys.argv[1:])
     logging.basicConfig(level=logging.INFO)
+    if args and args[0] == "actionable":
+        stats = relink_actionable_orphans()
+        logger.info("Actionable relink: %s", stats)
+        return 0
     stats = run()
     logger.info("Signal repair: %s", stats)
     return 0

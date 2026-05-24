@@ -7,9 +7,9 @@ from typing import Any
 
 from db.connection import get_conn
 from db.writer_lock import writer_lock
+from utils.http import fetch_workers, parallel_map
 
 from collectors.enrichment.utils import safe_request
-from utils.http import fetch_workers, parallel_map
 
 logger = logging.getLogger("website_monitor")
 

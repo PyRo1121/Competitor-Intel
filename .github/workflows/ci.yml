@@ -15,33 +15,7 @@ jobs:
           enable-cache: true
       - name: Install dependencies
         run: uv sync
-      - name: Lockfile check
-        run: make lock-check
-      - name: Python supply chain (pip-audit)
-        run: make supply-chain-py
-      - name: Compile
-        run: make compile
-      - name: Lint (Python)
-        run: make lint-py
-      - name: Init test database
-        run: |
-          export CI_DB_PATH="${{ github.workspace }}/data/ci_test.db"
-          uv run python -c "from db.schema import init_database; init_database()"
-      - name: Tests and coverage
+      - name: CI (lint, tests, gates, daily dry-run)
         env:
           CI_DB_PATH: ${{ github.workspace }}/data/ci_test.db
-        run: make test-cov
-      - name: Intel quality gate
-        env:
-          CI_DB_PATH: ${{ github.workspace }}/data/ci_test.db
-        run: make intel-gate
-      - name: Golden classifier eval
-        run: make golden-eval
-      - name: Claims audit strict
-        env:
-          CI_DB_PATH: ${{ github.workspace }}/data/ci_test.db
-        run: make claims-audit-strict
-      - name: Daily pipeline dry-run
-        env:
-          CI_SKIP_GROK_X: "1"
-        run: uv run python apps/worker/daily_intel.py --dry-run
+        run: make ci

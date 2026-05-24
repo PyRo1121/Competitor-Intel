@@ -15,8 +15,7 @@ logger = logging.getLogger("rss_collector")
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup, url_dedup_key
-from db.staging import ingest_staging_active
-from db.writer_lock import writer_lock
+from db.staging import collector_write_session
 from utils.http import close_http_client, fetch_text, fetch_workers, parallel_map
 
 from collectors.entity_extract import extract_entities_from_text, text_has_hype
@@ -265,12 +264,8 @@ def run_rss_collection() -> int:
                     linked_signals += 1
                 stored_count += store_signal(entry, cursor, use_writer_lock=False)
 
-    if ingest_staging_active():
+    with collector_write_session(conn):
         _store_parsed()
-    else:
-        with writer_lock():
-            _store_parsed()
-        conn.commit()
     conn.close()
     close_http_client()
 

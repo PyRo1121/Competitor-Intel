@@ -13,6 +13,8 @@ def get_config() -> dict[str, Any]:
         "db_path": str(db_path()),
         "github_token": os.getenv("GITHUB_TOKEN"),
         "discord_webhook": os.getenv("DISCORD_WEBHOOK_URL"),
+        "ollama_host": os.getenv("CI_OLLAMA_HOST")
+        or os.getenv("OLLAMA_HOST", "http://localhost:11434"),
         "ollama_model": os.getenv("CI_OLLAMA_MODEL", "qwen3-embedding:4b"),
         "sec_user_agent": os.getenv("CI_SEC_USER_AGENT", "Competitor-Intel/2.1"),
         "rate_limits": {

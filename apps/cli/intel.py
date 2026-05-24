@@ -37,6 +37,7 @@ logger = logging.getLogger("intel_cli")
 from db.connection import get_conn
 
 from automation.collector_registry import INTEL_CLI_COLLECTORS
+from automation.run_utils import subprocess_env
 
 COLLECTORS = INTEL_CLI_COLLECTORS
 
@@ -59,6 +60,7 @@ def run_script(script_path: str, args: list[str] | None = None) -> tuple[bool, s
         result = subprocess.run(
             cmd,
             cwd=str(MONOREPO_ROOT),
+            env=subprocess_env(MONOREPO_ROOT),
             capture_output=True,
             text=True,
             timeout=180,

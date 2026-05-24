@@ -6,8 +6,6 @@ import json
 from unittest.mock import patch
 
 import pytest
-
-from ci_paths import MONOREPO_ROOT
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
 from db.staging import clear_staging_run, list_staging_files, merge_staged_run
@@ -42,12 +40,14 @@ def test_yc_collector_skips_writer_lock_when_staging(monkeypatch):
     monkeypatch.setenv("CI_INGEST_STAGING", "1")
     monkeypatch.setenv("CI_STAGING_RUN_ID", "yc-lock-test")
     monkeypatch.setenv("CI_STAGING_SLOT", "yc_collector")
-    with patch("collectors.yc_collector.writer_lock") as flock:
-        with patch("collectors.yc_collector.safe_request") as req:
-            req.return_value.json.return_value = []
-            from collectors.yc_collector import run_yc_collector  # noqa: PLC0415
+    with (
+        patch("db.writer_lock.writer_lock") as flock,
+        patch("collectors.yc_collector.safe_request") as req,
+    ):
+        req.return_value.json.return_value = []
+        from collectors.yc_collector import run_yc_collector  # noqa: PLC0415
 
-            run_yc_collector()
+        run_yc_collector()
     flock.assert_not_called()
 
 
@@ -72,9 +72,7 @@ def test_staging_merge_inserts(operational_db, monkeypatch, tmp_path):
     assert summary["inserted"] == 1
 
     conn = get_conn()
-    n = conn.execute(
-        "SELECT COUNT(*) FROM raw_signals WHERE source = 'staging_test'"
-    ).fetchone()[0]
+    n = conn.execute("SELECT COUNT(*) FROM raw_signals WHERE source = 'staging_test'").fetchone()[0]
     conn.close()
     assert n == 1
     clear_staging_run(run_id)

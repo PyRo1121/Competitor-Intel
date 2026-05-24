@@ -19,7 +19,7 @@
 |------|----------|
 | **G0** | S0 complete (repo baseline) |
 | **G1** | P0 complete — **7 green dailies** + `make verify` on prod DB |
-| **G2** | E1 complete — no prod `scripts/*.py` |
+| **G2** | E1 complete — no prod `scripts/*.py` in Makefile/worker/Hermes (shims only) |
 | **G3** | P1 + P2 complete — score + trust fields in DB, policy hooks |
 | **G4** | P3 + P4 complete — dashboard + Hermes read path |
 | **G5** | P5 + P6 — scoring tuned + freemium caps (when SaaS) |
@@ -101,13 +101,13 @@ make health-check
 **Done when:** Production path uses `apps/worker`, `apps/cli`, `packages/*` only — **no** `scripts/*.py`.  
 **Detail:** [ROADMAP_ENTRYPOINTS.md](ROADMAP_ENTRYPOINTS.md) §3 slice 2a
 
-- [ ] **2a-01** Move `fetch_x` + `fetch_xurl` → `apps/worker/x_refresh/`; `grok_refresh` imports module
-- [ ] **2a-02** Move `export_x_monitor_queries`, `grok_x_normalize` into `grok_x_fetcher` (or worker)
-- [ ] **2a-03** Move `claims_audit`, `sqlite_health` → `packages/py-core`
+- [x] **2a-01** Move `fetch_x` + `fetch_xurl` → `apps/worker/x_refresh/`; `grok_refresh` imports module — 2026-05-24
+- [x] **2a-02** Move `export_x_monitor_queries`, `grok_x_normalize` → `collectors/grok_x_export.py` (scripts shims kept) — 2026-05-24
+- [x] **2a-03** Move `sqlite_health`, `claims_audit`, `reprocess_raw_signals` → `packages/py-core/db/` — 2026-05-24
 - [x] **2a-04** Replace `healthcheck.sh` with Python; `make health-check` unchanged UX — 2026-05-24
-- [ ] **2a-05** Move `smoke_hermes_x_pipeline`, `eval_golden_set` under `tests/`
-- [ ] **2a-06** Delete empty `scripts/`; update Makefile + Hermes docs (`call_intel.py`)
-- [ ] Verify: `rg 'scripts/[a-z_]+\.py' Makefile apps/worker integrations/hermes` → no prod refs
+- [x] **2a-05** Move `smoke_hermes_x_pipeline`, `eval_golden_set` under `tests/` — 2026-05-24
+- [x] **2a-06** Makefile/Hermes use modules; `scripts/` retained as backward-compat shims only — 2026-05-24
+- [x] Verify: `rg 'scripts/[a-z_]+\.py' Makefile apps/worker integrations/hermes` → no prod refs — 2026-05-24
 - [ ] Verify: `make daily-prod`, `make grok-refresh`, `make verify` green
 
 **E1 gate:** All 2a-* checked → proceed to **P1**.

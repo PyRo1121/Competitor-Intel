@@ -4,16 +4,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import sys
-from pathlib import Path
 
 import pytest
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-core"))
-sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
-
-from collectors.signal_repair import (  # noqa: E402
+from collectors.signal_repair import (
     backfill_funding_amounts,
     ensure_indexes,
     reclassify_general_news_events,

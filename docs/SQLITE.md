@@ -67,13 +67,13 @@ Reports: pragma snapshot, `data_version` (cheap change detector), WAL file bytes
 
 ```bash
 make sqlite-health
-uv run python scripts/sqlite_health.py --analyze
-uv run python scripts/sqlite_health.py --backup   # → data/backups/competitor_intel-<UTC>.db
+uv run python -m db.health --analyze
+uv run python -m db.health --backup   # → data/backups/competitor_intel-<UTC>.db
 ```
 
 ## Backup / durability
 
-- **Online backup:** `scripts/sqlite_health.py --backup` (SQLite backup API, safe under WAL).
+- **Online backup:** `uv run python -m db.health --backup` (SQLite backup API, safe under WAL).
 - **Litestream** (optional): continuous WAL replication to S3 — good for off-box DR; not bundled in-repo.
 - **Crash safety:** WAL + `synchronous=NORMAL` is SQLite-recommended; commits may roll back on power loss but DB stays consistent.
 
@@ -84,7 +84,7 @@ uv run python scripts/sqlite_health.py --backup   # → data/backups/competitor_
 | Layer | Today | Scale-out |
 |-------|--------|-----------|
 | Fetch | N parallel collector subprocesses (HTTP/RSS/EDGAR) | Same |
-| Write | N processes → **serialized** via `writer_lock` + per-row INSERT | **Preferred:** collectors → JSONL staging → **one** `ingest_staging.py` with `RawSignalBatchWriter` |
+| Write | N processes → **serialized** via `writer_lock` + per-row INSERT | **Preferred:** collectors → JSONL staging → **one** `db.staging.merge_staged_run` (`ingest_staging.py` CLI) with `RawSignalBatchWriter` |
 | Read | Bun API + dashboard (unlimited WAL readers) | Same |
 
 SQLite allows **one writer at a time** regardless. Extra writer processes only add lock contention — they do not increase write throughput. Flock + retry is correct for current scale; **staging → single merge** is the next step when collector count or EDGAR volume grows (eliminates cross-process lock entirely).
@@ -114,7 +114,7 @@ make sqlite-health
 make sqlite-checkpoint
 
 # Update planner statistics
-uv run python scripts/sqlite_health.py --analyze
+uv run python -m db.health --analyze
 
 # Ensure dedup unique index exists
 make migrate-dedup
@@ -175,7 +175,7 @@ with transaction(immediate=True, profile="ingest_bulk") as conn:
 **Default (daily parallel):** `CI_INGEST_STAGING=1`
 
 1. Collectors append JSONL under `data/staging/raw_signals/<run_id>/<collector>.jsonl` (no SQLite writes in collector processes; SELECTs for company match OK).
-2. `apps/worker/ingest_staging.py` merges with `RawSignalBatchWriter` + `ingest_bulk` + **one** outer `writer_lock` (batch commits use `use_writer_lock=False`).
+2. `db.staging.merge_staged_run` (CLI: `apps/worker/ingest_staging.py`; daily path: `parallel_collect.py` in-process) merges with `RawSignalBatchWriter` + `ingest_bulk` + **one** outer `writer_lock` (batch commits use `use_writer_lock=False`).
 3. Post-ingest: `make sqlite-checkpoint` / `post_ingest_wal_maintenance` on daily success.
 
 **Do not** call `writer_lock()` while `CI_INGEST_STAGING=1` unless you are actually writing SQLite in that section. Holding the flock during JSONL-only work blocks `ingest_staging` merge (`TimeoutError` on `<db>.write.lock`). Collectors that were wrong: `yc_collector`, `hackernews_collector` (fixed); pattern to copy: `rss_collector` (`ingest_staging_active()`).

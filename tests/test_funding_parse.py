@@ -2,13 +2,7 @@
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
-
-from collectors.funding_parse import parse_amount_usd  # noqa: E402
+from collectors.funding_parse import parse_amount_usd
 
 
 def test_parse_amount_usd_billion():

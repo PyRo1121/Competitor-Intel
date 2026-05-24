@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse, urlunparse
@@ -13,10 +14,52 @@ from db.connection import get_conn
 from db.sqlite_retry import retry_locked
 from db.writer_lock import writer_lock
 
-_RAW_SIGNAL_SQL = """
+RAW_SIGNAL_INSERT_SQL = """
 INSERT OR IGNORE INTO raw_signals (company_id, source, signal_type, data_json, detected_at)
 VALUES (?, ?, ?, ?, ?)
 """
+
+_RAW_SIGNAL_SQL = RAW_SIGNAL_INSERT_SQL
+
+
+@dataclass(frozen=True)
+class PreparedRawSignal:
+    company_id: int | None
+    source: str
+    signal_type: str
+    data_json: str
+    detected_at: str
+    url: str
+    payload: dict[str, Any]
+
+
+def prepare_raw_signal(
+    source: str,
+    url: str,
+    data: dict[str, Any],
+    *,
+    company_id: int | None = None,
+    detected_at: str | None = None,
+    dedup_key: str | None = None,
+    default_detected_at: str | None = None,
+) -> PreparedRawSignal | None:
+    """Normalize url/payload/dedup key for direct insert, batch, or JSONL staging."""
+    if not url and not dedup_key:
+        return None
+    key = dedup_key or url_dedup_key(url)
+    payload = dict(data)
+    payload.setdefault("url", url)
+    payload.setdefault("link", url)
+    ts = detected_at or default_detected_at or datetime.now().isoformat()
+    return PreparedRawSignal(
+        company_id=company_id,
+        source=source,
+        signal_type=key,
+        data_json=json.dumps(payload),
+        detected_at=ts,
+        url=url,
+        payload=payload,
+    )
 
 
 def cursor_execute_retry(
@@ -104,17 +147,26 @@ def insert_raw_signal_dedup(
             detected_at=detected_at,
             dedup_key=dedup_key,
         )
-    if not url and not dedup_key:
+    prepared = prepare_raw_signal(
+        source,
+        url,
+        data,
+        company_id=company_id,
+        detected_at=detected_at,
+        dedup_key=dedup_key,
+    )
+    if prepared is None:
         return False
-    key = dedup_key or url_dedup_key(url)
-    payload = dict(data)
-    payload.setdefault("url", url)
-    payload.setdefault("link", url)
-    ts = detected_at or datetime.now().isoformat()
     cursor_execute_retry(
         cursor,
         _RAW_SIGNAL_SQL,
-        (company_id, source, key, json.dumps(payload), ts),
+        (
+            prepared.company_id,
+            prepared.source,
+            prepared.signal_type,
+            prepared.data_json,
+            prepared.detected_at,
+        ),
         use_writer_lock=use_writer_lock,
     )
     return cursor.rowcount > 0

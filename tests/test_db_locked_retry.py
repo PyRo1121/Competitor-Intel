@@ -6,7 +6,6 @@ import sqlite3
 import threading
 
 import pytest
-
 from db.connection import configure_connection, get_conn, transaction
 from db.ingest import insert_raw_signal_dedup
 

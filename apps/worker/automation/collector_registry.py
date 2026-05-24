@@ -45,45 +45,62 @@ FREQUENT_PARALLEL_COLLECTORS: tuple[str, ...] = (
     "collectors/techcrunch_edgar_collector.py",
 )
 
-# After frequent parallel: classify + URL fanout + funding rollup (no jobs/embeddings)
-FREQUENT_SEQUENTIAL: tuple[tuple[str, tuple[str, ...]], ...] = (
+# Hermes Grok x_search batch only (run on a separate cron, ~5×/day ET)
+GROK_COLLECTORS: tuple[str, ...] = ("collectors/x_signal_collector.py",)
+
+# Shared sequential profiles (daily vs frequent vs grok_refresh)
+SEQUENTIAL_WEBSITE_FANOUT: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("collectors/website_monitor.py", ()),
     ("collectors/signal_url_fanout.py", ()),
-    ("collectors/signal_processor.py", ()),
+)
+
+SEQUENTIAL_DISCOVER_RANK_FUNDING: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("collectors/candidate_discovery.py", ()),
     ("collectors/auto_promote.py", ()),
     ("collectors/company_ranker.py", ()),
     ("collectors/funding_rollup.py", ()),
 )
 
-# Hermes Grok x_search batch only (run on a separate cron, ~5×/day ET)
-GROK_COLLECTORS: tuple[str, ...] = ("collectors/x_signal_collector.py",)
+SEQUENTIAL_PROCESSOR_ROLLUP: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("collectors/signal_processor.py", ()),
+    *SEQUENTIAL_DISCOVER_RANK_FUNDING,
+)
 
-# Legacy single-script continuous wrapper (RSS + website; X moved to grok_refresh)
-CONTINUOUS_COLLECTORS: tuple[str, ...] = (
-    "collectors/rss_collector.py",
-    "collectors/website_monitor.py",
+# After frequent parallel: classify + URL fanout + funding rollup (no jobs/embeddings)
+FREQUENT_SEQUENTIAL: tuple[tuple[str, tuple[str, ...]], ...] = (
+    *SEQUENTIAL_WEBSITE_FANOUT,
+    *SEQUENTIAL_PROCESSOR_ROLLUP,
+)
+
+# grok_refresh.py — processor then fanout (X ingest order)
+GROK_POST_X: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("collectors/signal_processor.py", ()),
+    ("collectors/signal_url_fanout.py", ()),
 )
 
 # Post-parallel sequential pipeline (daily_intel.py).
 # Intelligence extraction: signal_processor + funding_rollup (not funding_collector).
 # Daily sequential — brief at end; tweet/embed/enrich not on daily schedule.
 _DAILY_SEQUENTIAL_BASE: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("collectors/website_monitor.py", ()),
-    ("collectors/signal_url_fanout.py", ()),
+    *SEQUENTIAL_WEBSITE_FANOUT,
     ("collectors/job_tracker.py", ()),
     ("collectors/signal_processor.py", ()),
     ("collectors/signal_repair.py", ()),
     ("collectors/intel_quality_gate.py", ()),
-    ("collectors/candidate_discovery.py", ()),
-    ("collectors/auto_promote.py", ()),
-    ("collectors/company_ranker.py", ()),
-    ("collectors/funding_rollup.py", ()),
+    *SEQUENTIAL_DISCOVER_RANK_FUNDING,
     ("apps/worker/daily_brief.py", ("--export",)),
 )
 
 # Back-compat import name (without CI_COMPANY_DATA_ROLLUP gate).
 DAILY_SEQUENTIAL = _DAILY_SEQUENTIAL_BASE
+
+
+def get_frequent_sequential() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return FREQUENT_SEQUENTIAL
+
+
+def get_grok_post_x_steps() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return GROK_POST_X
 
 
 def _env_truthy(name: str) -> bool:
@@ -174,9 +191,9 @@ def registered_collector_script_paths(*, include_gated_daily: bool = True) -> fr
     paths.update(WEEKLY_FORM_D_COLLECTORS)
     paths.update(FREQUENT_PARALLEL_COLLECTORS)
     paths.update(GROK_COLLECTORS)
-    paths.update(CONTINUOUS_COLLECTORS)
     paths.update(EXTRACTION_SCRIPTS)
     paths.update(_scripts_from_steps(FREQUENT_SEQUENTIAL))
+    paths.update(_scripts_from_steps(GROK_POST_X))
     paths.update(
         _scripts_from_steps(
             get_daily_sequential() if include_gated_daily else _DAILY_SEQUENTIAL_BASE

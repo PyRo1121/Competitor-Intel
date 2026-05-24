@@ -821,5 +821,9 @@ def apply_runtime_migrations(conn: sqlite3.Connection) -> None:
         """,
     )
 
+    from db.raw_signals_dedup import ensure_raw_signals_dedup_index
+
+    ensure_raw_signals_dedup_index(conn)
+
     conn.commit()
     logger.debug("Runtime migrations applied")
