@@ -18,6 +18,12 @@ from automation.run_utils import configure_logging, log_timings, run_script
 
 logger = logging.getLogger("parallel_collect")
 
+# Lazy import — parallel_collect must not require db at module load for dry-run tests.
+def _staging_files_for_run(run_id: str):
+    from db.staging import list_staging_files
+
+    return list_staging_files(run_id)
+
 
 def _staging_enabled() -> bool:
     return os.environ.get("CI_INGEST_STAGING", "1").strip().lower() not in (
@@ -91,7 +97,7 @@ def run_parallel_collectors(
             if ok:
                 success += 1
 
-    if staging and success == len(targets) and run_id:
+    if staging and run_id and _staging_files_for_run(run_id):
         merge_ok, merge_elapsed = run_script(
             "apps/worker/ingest_staging.py",
             "--run-id",
@@ -103,6 +109,8 @@ def run_parallel_collectors(
         timings.append(("ingest_staging", merge_elapsed))
         if not merge_ok:
             success = max(0, success - 1)
+        elif success == len(targets):
+            os.environ.pop("CI_STAGING_RUN_ID", None)
 
     log_timings(logger, timings, top_n=5)
     logger.info(

@@ -10,7 +10,49 @@ import pytest
 from ci_paths import MONOREPO_ROOT
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
-from db.staging import clear_staging_run, list_staging_files, merge_staged_run
+from db.staging import (
+    clear_staging_run,
+    ingest_staging_active,
+    list_staging_files,
+    merge_staged_run,
+)
+
+
+def test_ingest_staging_requires_slot(monkeypatch):
+    monkeypatch.setenv("CI_INGEST_STAGING", "1")
+    monkeypatch.setenv("CI_STAGING_RUN_ID", "run-only")
+    monkeypatch.delenv("CI_STAGING_SLOT", raising=False)
+    assert ingest_staging_active() is False
+
+    monkeypatch.setenv("CI_STAGING_SLOT", "rss_collector")
+    assert ingest_staging_active() is True
+
+
+@pytest.mark.operational
+def test_insert_without_slot_writes_sqlite(operational_db, monkeypatch, tmp_path):
+    """Sequential pipeline steps must not JSONL-stage (no merge after parallel)."""
+    monkeypatch.setattr("db.staging.MONOREPO_ROOT", tmp_path)
+    monkeypatch.setenv("CI_INGEST_STAGING", "1")
+    monkeypatch.setenv("CI_STAGING_RUN_ID", "seq-run")
+    monkeypatch.delenv("CI_STAGING_SLOT", raising=False)
+
+    conn = get_conn()
+    cur = conn.cursor()
+    ok = insert_raw_signal_dedup(
+        cur,
+        "sequential_fanout",
+        "https://example.com/fanout-1",
+        {"title": "direct sqlite"},
+        dedup_key="seq_key_1",
+    )
+    conn.commit()
+    n = conn.execute(
+        "SELECT COUNT(*) FROM raw_signals WHERE source = 'sequential_fanout'"
+    ).fetchone()[0]
+    conn.close()
+    assert ok is True
+    assert n == 1
+    assert list_staging_files("seq-run") == []
 
 
 @pytest.mark.operational
