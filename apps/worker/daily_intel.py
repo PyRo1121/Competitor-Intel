@@ -77,6 +77,11 @@ def main() -> int:
     if parallel_result.aborted:
         return 1
 
+    # Sequential steps write SQLite directly; parallel_collect may have set run_id in os.environ.
+    os.environ["CI_INGEST_STAGING"] = "0"
+    os.environ.pop("CI_STAGING_RUN_ID", None)
+    os.environ.pop("CI_STAGING_SLOT", None)
+
     tail_result = run_pipeline(
         [("run_intel.py", ()), *get_daily_sequential()],
         abort_on_fail=True,
