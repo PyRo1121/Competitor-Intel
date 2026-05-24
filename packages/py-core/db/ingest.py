@@ -91,7 +91,8 @@ def insert_raw_signal_dedup(
     Uses INSERT OR IGNORE (unique idx_raw_signals_dedup) — no SELECT-before-INSERT,
     fewer locks, safe under parallel collectors when writer_lock is enabled.
 
-    When CI_INGEST_STAGING=1, appends JSONL only (merge via ingest_staging.py).
+    When CI_INGEST_STAGING=1 and CI_STAGING_SLOT is set (parallel collectors),
+    appends JSONL only (merge via ingest_staging.py).
     """
     from db.staging import ingest_staging_active, stage_raw_signal
 

@@ -13,12 +13,17 @@ from db.ingest import url_dedup_key
 
 
 def ingest_staging_active() -> bool:
-    return os.environ.get("CI_INGEST_STAGING", "").strip().lower() in (
+    """True only for parallel collector subprocesses (slot + run id set)."""
+    if os.environ.get("CI_INGEST_STAGING", "").strip().lower() not in (
         "1",
         "true",
         "yes",
         "on",
-    )
+    ):
+        return False
+    if not os.environ.get("CI_STAGING_RUN_ID", "").strip():
+        return False
+    return bool(os.environ.get("CI_STAGING_SLOT", "").strip())
 
 
 def staging_run_id() -> str:
