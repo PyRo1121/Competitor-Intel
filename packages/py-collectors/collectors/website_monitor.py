@@ -2,8 +2,6 @@
 import hashlib
 import json
 import logging
-import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,16 +9,9 @@ from db.connection import get_conn
 from db.writer_lock import writer_lock
 
 from collectors.enrichment.utils import safe_request
+from utils.http import fetch_workers, parallel_map
 
 logger = logging.getLogger("website_monitor")
-
-
-def _website_fetch_workers() -> int:
-    raw = os.environ.get("CI_WEBSITE_FETCH_WORKERS", "16").strip()
-    try:
-        return max(1, min(32, int(raw)))
-    except ValueError:
-        return 16
 
 
 def fetch_homepage(url: str) -> dict[str, Any] | None:
@@ -119,17 +110,13 @@ def run() -> int:
 
     checked = 0
     changed = 0
-    workers = _website_fetch_workers()
 
     def _fetch_row(row: tuple[int, str, str]) -> tuple[int, str, dict[str, Any] | None]:
         company_id, name, website = row
         return company_id, name, fetch_homepage(website)
 
-    results: list[tuple[int, str, dict[str, Any] | None]] = []
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(_fetch_row, row) for row in companies]
-        for future in as_completed(futures):
-            results.append(future.result())
+    workers = min(fetch_workers(default=16, env_var="CI_WEBSITE_FETCH_WORKERS"), 32)
+    results = parallel_map(_fetch_row, companies, workers=workers)
 
     with writer_lock():
         for company_id, name, snapshot in results:

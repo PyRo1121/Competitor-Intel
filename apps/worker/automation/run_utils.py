@@ -58,6 +58,7 @@ def run_script(
     cwd: Path | None = None,
     logger: logging.Logger | None = None,
     step_id: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> tuple[bool, float]:
     """Run a project script; return (success, elapsed_seconds)."""
     log = logger or logging.getLogger("automation")
@@ -70,7 +71,10 @@ def run_script(
     cmd = [sys.executable, str(root / script), *args]
     started = time.perf_counter()
     log.info("Running: %s", " ".join(cmd))
-    result = subprocess.run(cmd, cwd=root, env=subprocess_env(root))
+    env = subprocess_env(root)
+    if extra_env:
+        env.update(extra_env)
+    result = subprocess.run(cmd, cwd=root, env=env)
     elapsed = time.perf_counter() - started
     ok = result.returncode == 0
     if ok:

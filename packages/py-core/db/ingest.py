@@ -90,7 +90,20 @@ def insert_raw_signal_dedup(
 
     Uses INSERT OR IGNORE (unique idx_raw_signals_dedup) — no SELECT-before-INSERT,
     fewer locks, safe under parallel collectors when writer_lock is enabled.
+
+    When CI_INGEST_STAGING=1, appends JSONL only (merge via ingest_staging.py).
     """
+    from db.staging import ingest_staging_active, stage_raw_signal
+
+    if ingest_staging_active():
+        return stage_raw_signal(
+            source,
+            url,
+            data,
+            company_id=company_id,
+            detected_at=detected_at,
+            dedup_key=dedup_key,
+        )
     if not url and not dedup_key:
         return False
     key = dedup_key or url_dedup_key(url)

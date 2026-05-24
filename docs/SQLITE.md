@@ -172,12 +172,17 @@ with transaction(immediate=True, profile="ingest_bulk") as conn:
 
 ## Staging ingest (recommended at scale)
 
-When `CI_PARALLEL_COLLECTORS` > 4 or EDGAR bulk dominates wall time:
+**Default (daily parallel):** `CI_INGEST_STAGING=1`
 
-1. Collectors write JSONL to `data/staging/raw_signals/<run_id>.jsonl` (no DB).
-2. Single `ingest_staging.py` merges with `RawSignalBatchWriter` + `ingest_bulk` profile + post-ingest `wal_checkpoint(RESTART)`.
+1. Collectors append JSONL under `data/staging/raw_signals/<run_id>/<collector>.jsonl` (no SQLite writes in collector processes; SELECTs for company match OK).
+2. `apps/worker/ingest_staging.py` merges with `RawSignalBatchWriter` + `ingest_bulk` + **one** outer `writer_lock` (batch commits use `use_writer_lock=False`).
+3. Post-ingest: `make sqlite-checkpoint` / `post_ingest_wal_maintenance` on daily success.
 
-Until then: writer lock + batch EDGAR + `make sqlite-checkpoint` after daily is sufficient.
+**Do not** call `writer_lock()` while `CI_INGEST_STAGING=1` unless you are actually writing SQLite in that section. Holding the flock during JSONL-only work blocks `ingest_staging` merge (`TimeoutError` on `<db>.write.lock`). Collectors that were wrong: `yc_collector`, `hackernews_collector` (fixed); pattern to copy: `rss_collector` (`ingest_staging_active()`).
+
+**Bun read API** (`archive/v2-read-surface/api/`): use a single shared connection with `query_only=ON` (see `api_read` profile in Python). Do not run two API servers against the same `CI_DB_PATH` during `make daily-prod` — extra connections extend WAL checkpoint time; they should not take `writer_lock`, but they still compete for filesystem cache and can pin WAL snapshots.
+
+Disable staging: `CI_INGEST_STAGING=0` (legacy per-process SQLite writes + `writer_lock`).
 
 ## References
 

@@ -32,8 +32,10 @@ class RawSignalBatchWriter:
         *,
         commit_every: int = 500,
         profile: ProfileName = "ingest_bulk",
+        use_writer_lock: bool = True,
     ) -> None:
         self.commit_every = max(1, commit_every)
+        self._use_writer_lock = use_writer_lock
         self._conn = get_conn(profile=profile)
         self._cursor = self._conn.cursor()
         self._pending = 0
@@ -71,7 +73,10 @@ class RawSignalBatchWriter:
     def flush(self) -> None:
         if self._pending <= 0:
             return
-        with writer_lock():
+        if self._use_writer_lock:
+            with writer_lock():
+                self._conn.commit()
+        else:
             self._conn.commit()
         self._pending = 0
 

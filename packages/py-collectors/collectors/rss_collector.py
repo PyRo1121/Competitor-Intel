@@ -5,9 +5,7 @@ Monitors curated RSS feeds for company mentions and competitive intelligence.
 """
 
 import logging
-import os
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -17,20 +15,16 @@ logger = logging.getLogger("rss_collector")
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup, url_dedup_key
+from db.staging import ingest_staging_active
 from db.writer_lock import writer_lock
-from utils.http import close_http_client, fetch_text
+from utils.http import close_http_client, fetch_text, fetch_workers, parallel_map
 
 from collectors.entity_extract import extract_entities_from_text, text_has_hype
+from collectors.signal_text import extract_company_mentions, load_company_names
 from collectors.sources_registry import catalog_summary, rss_feed_dicts
 
 VETTED_RSS_FEEDS = rss_feed_dicts()
 
-def _rss_fetch_workers() -> int:
-    raw = os.environ.get("CI_RSS_FETCH_WORKERS", "20").strip()
-    try:
-        return max(1, min(64, int(raw)))
-    except ValueError:
-        return 20
 RSS_ENTRIES_PER_FEED = 25
 RSS_LOOKBACK_DAYS = 30
 RSS_SUMMARY_MAX = 1200
@@ -54,44 +48,6 @@ FUNDING_SIGNAL_KEYWORDS = (
     "acquired",
     "acquisition",
 )
-
-
-def load_company_names() -> list[str]:
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute("SELECT name, slug, x_handle FROM companies")
-    names: list[str] = []
-    for row in cursor.fetchall():
-        name, slug, handle = row
-        if name:
-            names.append(name)
-        if slug:
-            names.append(slug.replace("-", " "))
-        if handle:
-            names.append(handle.lstrip("@"))
-    conn.close()
-    return names
-
-
-def extract_company_mentions(text: str, company_names: list[str]) -> list[str]:
-    if not text:
-        return []
-    text_lower = text.lower()
-    mentions: list[str] = []
-    for company in company_names:
-        company_lower = company.lower()
-        if len(company_lower) < 3:
-            continue
-        idx = text_lower.find(company_lower)
-        if idx >= 0:
-            before = idx == 0 or not text_lower[idx - 1].isalnum()
-            after = (
-                idx + len(company_lower) >= len(text_lower)
-                or not text_lower[idx + len(company_lower)].isalnum()
-            )
-            if before and after:
-                mentions.append(company)
-    return list(set(mentions))
 
 
 def entry_is_high_signal(text: str, category: str) -> bool:
@@ -291,20 +247,17 @@ def run_rss_collection() -> int:
     conn = get_conn()
     cursor = conn.cursor()
 
-    parsed: list[tuple[str, list[dict]]] = []
-    workers = _rss_fetch_workers()
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(fetch_and_parse_feed, feed, company_names): feed
-            for feed in VETTED_RSS_FEEDS
-        }
-        for future in as_completed(futures):
-            feed_name, entries = future.result()
-            parsed.append((feed_name, entries))
-            if entries:
-                logger.info("[OK] %s: %s entries", feed_name, len(entries))
+    parsed = parallel_map(
+        lambda feed: fetch_and_parse_feed(feed, company_names),
+        list(VETTED_RSS_FEEDS),
+        workers=fetch_workers(default=20, env_var="CI_RSS_FETCH_WORKERS"),
+    )
+    for feed_name, entries in parsed:
+        if entries:
+            logger.info("[OK] %s: %s entries", feed_name, len(entries))
 
-    with writer_lock():
+    def _store_parsed() -> None:
+        nonlocal total_entries, linked_signals, stored_count
         for _feed_name, entries in parsed:
             for entry in entries:
                 total_entries += 1
@@ -312,7 +265,12 @@ def run_rss_collection() -> int:
                     linked_signals += 1
                 stored_count += store_signal(entry, cursor, use_writer_lock=False)
 
-    conn.commit()
+    if ingest_staging_active():
+        _store_parsed()
+    else:
+        with writer_lock():
+            _store_parsed()
+        conn.commit()
     conn.close()
     close_http_client()
 

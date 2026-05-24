@@ -10,6 +10,7 @@ from typing import Any
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
+from db.staging import ingest_staging_active
 from db.writer_lock import writer_lock
 from utils.http import close_http_client, safe_request
 
@@ -47,7 +48,8 @@ def run_yc_collector() -> int:
     inserted = 0
     cap = _max_rows()
 
-    with writer_lock():
+    def _ingest_rows() -> None:
+        nonlocal inserted
         for row in companies:
             if inserted >= cap:
                 break
@@ -87,7 +89,13 @@ def run_yc_collector() -> int:
                 use_writer_lock=False,
             ):
                 inserted += 1
-        conn.commit()
+
+    if ingest_staging_active():
+        _ingest_rows()
+    else:
+        with writer_lock():
+            _ingest_rows()
+            conn.commit()
     conn.close()
     logger.info("YC collector stored %s signals", inserted)
     return inserted

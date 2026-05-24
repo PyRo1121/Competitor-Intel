@@ -64,7 +64,8 @@ Collectors fetch many URLs in parallel (threads); SQLite writes batch under one 
 | `CI_RSS_FETCH_WORKERS` | 20 | RSS feeds in parallel |
 | `CI_HN_FETCH_WORKERS` | 24 | HN story + comment fetches |
 | `CI_WEBSITE_FETCH_WORKERS` | 16 | Company homepages |
-| `CI_PARALLEL_COLLECTORS` | 3 | Collector **subprocesses** at once (lower = less DB contention) |
+| `CI_PARALLEL_COLLECTORS` | 4 | Collector subprocesses (with `CI_INGEST_STAGING=1`, no DB in collectors) |
+| `CI_INGEST_STAGING` | 1 | Collectors → JSONL; `ingest_staging.py` single merge |
 
 ## Verification
 

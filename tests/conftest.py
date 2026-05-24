@@ -10,8 +10,9 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 PY_CORE = ROOT / "packages" / "py-core"
 PY_COLLECTORS = ROOT / "packages" / "py-collectors"
+WORKER = ROOT / "apps" / "worker"
 
-for path in (PY_CORE, PY_COLLECTORS):
+for path in (PY_CORE, PY_COLLECTORS, WORKER):
     path_str = str(path)
     if path_str not in sys.path:
         sys.path.insert(0, path_str)

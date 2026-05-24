@@ -18,7 +18,7 @@ from typing import Any
 from db.connection import get_conn
 from db.ingest import get_company_id, insert_raw_signal_dedup, url_dedup_key
 
-from collectors.rss_collector import extract_company_mentions, load_company_names
+from collectors.signal_text import extract_company_mentions, load_company_names
 from collectors.sources_registry import get_x_monitor_queries
 
 logger = logging.getLogger("x_signal_collector")

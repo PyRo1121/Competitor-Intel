@@ -15,20 +15,11 @@ from ci_paths import MONOREPO_ROOT, ensure_app_paths
 ensure_app_paths()
 
 from automation.collector_registry import get_daily_sequential
+from automation.pipeline_runner import _abort_unless_force  # re-export for tests
+from automation.pipeline_runner import run_pipeline
 from automation.run_utils import configure_logging, log_timings, run_script
 
 logger = logging.getLogger("daily_intel")
-
-
-def _abort_unless_force(step: str, ok: bool, force: bool) -> bool:
-    """Return True if the pipeline should stop immediately."""
-    if ok:
-        return False
-    if force:
-        logger.warning("%s failed (--force: continuing)", step)
-        return False
-    logger.error("%s failed; aborting pipeline (use --force to continue)", step)
-    return True
 
 
 def main() -> int:
@@ -50,8 +41,6 @@ def main() -> int:
     logger.info("=== Daily Competitor Intelligence Pipeline ===")
     pipeline_start = time.perf_counter()
     timings: list[tuple[str, float]] = []
-    success = 0
-    total_steps = 0
 
     grok_batch = MONOREPO_ROOT / "data" / "hermes_enrich" / "grok_x_results.json"
     os.environ.setdefault("GROK_X_RESULTS_PATH", str(grok_batch))
@@ -74,43 +63,35 @@ def main() -> int:
             grok_batch,
         )
 
+    os.environ.setdefault("CI_INGEST_STAGING", "1")
     parallel_start = time.perf_counter()
-    ok, elapsed = run_script(
-        "automation/parallel_collect.py",
-        "--profile",
-        parallel_profile,
+    parallel_result = run_pipeline(
+        [("automation/parallel_collect.py", ("--profile", parallel_profile))],
+        abort_on_fail=True,
+        force=args.force,
+        dry_run=args.dry_run,
         logger=logger,
-        step_id="parallel_collect",
+        run_script_fn=run_script,
     )
-    timings.append(("parallel_collectors", elapsed))
-    total_steps += 1
-    if ok:
-        success += 1
+    timings.extend(parallel_result.timings)
     logger.info("Parallel batch wall time: %.1fs", time.perf_counter() - parallel_start)
-    if _abort_unless_force("parallel_collect", ok, args.force):
-        log_timings(logger, timings)
+    if parallel_result.aborted:
         return 1
 
-    ok, elapsed = run_script("run_intel.py", logger=logger, step_id="run_intel")
-    timings.append(("run_intel.py", elapsed))
-    total_steps += 1
-    if ok:
-        success += 1
-    if _abort_unless_force("run_intel", ok, args.force):
-        log_timings(logger, timings)
+    tail_result = run_pipeline(
+        [("run_intel.py", ()), *get_daily_sequential()],
+        abort_on_fail=True,
+        force=args.force,
+        dry_run=args.dry_run,
+        logger=logger,
+        run_script_fn=run_script,
+    )
+    timings.extend(tail_result.timings)
+    if tail_result.aborted:
         return 1
 
-    for script, script_args in get_daily_sequential():
-        step_id = script.rsplit("/", 1)[-1].replace(".py", "")
-        ok, elapsed = run_script(script, *script_args, logger=logger, step_id=step_id)
-        timings.append((script, elapsed))
-        total_steps += 1
-        if ok:
-            success += 1
-        elif _abort_unless_force(script, ok, args.force):
-            log_timings(logger, timings)
-            return 1
-
+    success = parallel_result.success + tail_result.success
+    total_steps = parallel_result.total_steps + tail_result.total_steps
     total_elapsed = time.perf_counter() - pipeline_start
     logger.info("Pipeline wall time: %.1fs", total_elapsed)
     log_timings(logger, timings)

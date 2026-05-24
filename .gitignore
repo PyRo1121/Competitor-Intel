@@ -38,6 +38,7 @@ data/*.db-*
 data/exports/
 data/reports/
 data/hermes_enrich/
+data/staging/
 data/obsidian/Companies/
 !data/obsidian/Templates/
 

@@ -64,7 +64,7 @@ Gate: pipeline-only tree; Hermes shim; docs exist; production naming.
 ### P0-B — Pipeline mechanics
 
 - [x] `make migrate-dedup` or schema init; dedup index present — 2026-05-24
-- [ ] `make daily-prod` completes without `--force` (in progress; EDGAR hit `database is locked` once)
+- [ ] `make daily-prod` completes without `--force` (staging merge + job_tracker; re-verify after COM work)
 - [x] `make rollup-all` (or rollups enabled in daily env) — rollups on daily path
 - [x] `make claims-audit-strict` passes on prod DB — 2026-05-24
 - [x] `make health-check` passes (SQLite checks) — 2026-05-24

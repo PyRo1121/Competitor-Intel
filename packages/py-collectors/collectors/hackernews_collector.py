@@ -7,20 +7,19 @@ import logging
 import os
 import re
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
+from db.staging import ingest_staging_active
 from db.writer_lock import writer_lock
-from utils.http import close_http_client, safe_request
-from utils.http_parallel import parallel_map
+from utils.http import close_http_client, fetch_workers, parallel_map, safe_request
 
 from collectors.company_match import resolve_company_id as match_company_id
 from collectors.entity_extract import extract_entities_from_text, text_has_hype
-from collectors.rss_collector import extract_company_mentions, load_company_names
+from collectors.signal_text import extract_company_mentions, load_company_names
 from collectors.signal_company_resolver import build_domain_index, resolve_from_url
 
 logger = logging.getLogger("hackernews")
@@ -32,14 +31,6 @@ TOP_STORIES = f"{HN_API}/topstories.json"
 NEW_STORIES = f"{HN_API}/newstories.json"
 COMMENT_FETCH_LIMIT = 6
 THREAD_COMMENT_MAX = 500
-
-
-def _hn_fetch_workers() -> int:
-    raw = os.environ.get("CI_HN_FETCH_WORKERS", "24").strip()
-    try:
-        return max(1, min(64, int(raw)))
-    except ValueError:
-        return 24
 
 
 def fetch_story_ids(endpoint: str, limit: int = 50) -> list[int]:
@@ -216,11 +207,14 @@ def store_signals(stories: list[dict[str, Any]], company_names: list[str]) -> in
             count += 1
         return count
 
-    with writer_lock():
+    if ingest_staging_active():
         for story in stories:
             stored += _store_one(story)
-
-    conn.commit()
+    else:
+        with writer_lock():
+            for story in stories:
+                stored += _store_one(story)
+        conn.commit()
     conn.close()
     logger.info("Stored %d new Hacker News signals", stored)
     return stored
@@ -235,9 +229,10 @@ def enrich_stories_with_threads(stories: list[dict[str, Any]]) -> list[dict[str,
         story["thread_comments"] = fetch_thread_comments(story)
         return story
 
-    workers = min(_hn_fetch_workers(), len(need_threads))
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        enriched = list(pool.map(_enrich, need_threads))
+    hn_workers = fetch_workers(default=24, env_var="CI_HN_FETCH_WORKERS")
+    # Cap outer pool: each story may fetch up to 8 comments in parallel.
+    outer_workers = min(6, hn_workers, len(need_threads))
+    enriched = parallel_map(_enrich, need_threads, workers=outer_workers)
     by_id = {s["id"]: s for s in enriched}
     for story in stories:
         if story["id"] in by_id:
@@ -364,11 +359,16 @@ def run() -> int:
             conn = get_conn()
             cursor = conn.cursor()
             try:
-                with writer_lock():
+                if ingest_staging_active():
                     stored += store_algolia_show_hn(
                         cursor, company_names, use_writer_lock=False
                     )
-                conn.commit()
+                else:
+                    with writer_lock():
+                        stored += store_algolia_show_hn(
+                            cursor, company_names, use_writer_lock=False
+                        )
+                    conn.commit()
             finally:
                 conn.close()
         else:

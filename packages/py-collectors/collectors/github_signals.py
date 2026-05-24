@@ -12,6 +12,7 @@ logger = logging.getLogger("github_signals")
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
+from db.staging import ingest_staging_active
 from utils.http import close_http_client, get_http_client
 
 GITHUB_API = "https://api.github.com"
@@ -39,7 +40,7 @@ def add_signal(title: str, summary: str, source: str, url: str) -> bool:
             "kind": "github_trending",
         }
         inserted = insert_raw_signal_dedup(cursor, source, url, payload)
-        if inserted:
+        if inserted and not ingest_staging_active():
             conn.commit()
         return inserted
     finally:

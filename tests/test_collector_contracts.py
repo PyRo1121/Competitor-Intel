@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "packages" / "py-core"))
 sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
 
 from collectors.hackernews_collector import fetch_story, fetch_story_ids  # noqa: E402
-from collectors.rss_collector import extract_company_mentions  # noqa: E402
+from collectors.signal_text import extract_company_mentions  # noqa: E402
 from utils.http import fetch_text  # noqa: E402
 
 SAMPLE_RSS = """<?xml version="1.0"?>

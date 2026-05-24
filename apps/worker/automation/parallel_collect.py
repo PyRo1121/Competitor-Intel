@@ -4,7 +4,9 @@ import logging
 import os
 import sys
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 from automation.collector_registry import (
     BASE,
@@ -17,9 +19,19 @@ from automation.run_utils import configure_logging, log_timings, run_script
 logger = logging.getLogger("parallel_collect")
 
 
+def _staging_enabled() -> bool:
+    return os.environ.get("CI_INGEST_STAGING", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
 def _max_parallel() -> int:
-    """Collector subprocesses; default 3 to limit SQLite writer lock contention."""
-    raw = os.environ.get("CI_PARALLEL_COLLECTORS", "3").strip()
+    """Collector subprocesses; default 4 when staging (no DB writes in collectors)."""
+    default = "4" if _staging_enabled() else "3"
+    raw = os.environ.get("CI_PARALLEL_COLLECTORS", default).strip()
     try:
         return max(1, min(6, int(raw)))
     except ValueError:
@@ -47,17 +59,50 @@ def run_parallel_collectors(
     batch_start = time.perf_counter()
 
     workers = _max_parallel()
-    logger.info("Parallel collectors: max_workers=%s profile=%s", workers, profile)
+    staging = _staging_enabled()
+    run_id = os.environ.get("CI_STAGING_RUN_ID", "").strip()
+    if staging and not run_id:
+        run_id = uuid.uuid4().hex[:12]
+        os.environ["CI_STAGING_RUN_ID"] = run_id
+    logger.info(
+        "Parallel collectors: max_workers=%s profile=%s staging=%s run_id=%s",
+        workers,
+        profile,
+        staging,
+        run_id or "-",
+    )
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {
-            pool.submit(run_script, script, cwd=BASE, logger=logger): script for script in targets
-        }
+        futures = {}
+        for script in targets:
+            extra: dict[str, str] = {}
+            if staging:
+                extra = {
+                    "CI_INGEST_STAGING": "1",
+                    "CI_STAGING_RUN_ID": run_id,
+                    "CI_STAGING_SLOT": Path(script).stem,
+                }
+            futures[pool.submit(run_script, script, cwd=BASE, logger=logger, extra_env=extra)] = (
+                script
+            )
         for future in as_completed(futures):
             ok, elapsed = future.result()
             script = futures[future]
             timings.append((script, elapsed))
             if ok:
                 success += 1
+
+    if staging and success == len(targets) and run_id:
+        merge_ok, merge_elapsed = run_script(
+            "apps/worker/ingest_staging.py",
+            "--run-id",
+            run_id,
+            cwd=BASE,
+            logger=logger,
+            step_id="ingest_staging",
+        )
+        timings.append(("ingest_staging", merge_elapsed))
+        if not merge_ok:
+            success = max(0, success - 1)
 
     log_timings(logger, timings, top_n=5)
     logger.info(
