@@ -108,7 +108,8 @@ make health-check
 - [x] **2a-05** Move `smoke_hermes_x_pipeline`, `eval_golden_set` under `tests/` — 2026-05-24
 - [x] **2a-06** Makefile/Hermes use modules; `scripts/` retained as backward-compat shims only — 2026-05-24
 - [x] Verify: `rg 'scripts/[a-z_]+\.py' Makefile apps/worker integrations/hermes` → no prod refs — 2026-05-24
-- [ ] Verify: `make daily-prod`, `make grok-refresh`, `make verify` green
+- [x] Verify: `make ci` green on `data/ci_test.db` (lint + test-cov + gates) — 2026-05-24
+- [ ] Verify: `make daily-prod`, `make grok-refresh` green on prod DB
 
 **E1 gate:** All 2a-* checked → proceed to **P1**.
 
