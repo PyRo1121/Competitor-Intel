@@ -1,6 +1,27 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:best-practices",
+    ":separateMultipleMajorReleases"
+  ],
+  "labels": ["dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "prConcurrentLimit": 5,
+  "constraints": {
+    "python": "3.12"
+  },
+  "packageRules": [
+    {
+      "description": "Group dev-tooling minor/patch updates (uv workspace dev group)",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["dependency-groups"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "python dev dependencies (non-major)"
+    },
+    {
+      "description": "Batch GitHub Actions updates into one PR when possible",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    }
   ]
 }
