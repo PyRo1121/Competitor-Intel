@@ -349,7 +349,7 @@ def run_x_collection() -> int:
             path or "(unset)",
         )
         return 1
-    return total
+    return 0
 
 
 def run() -> int:
@@ -358,4 +358,4 @@ def run() -> int:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    run()
+    raise SystemExit(run())
