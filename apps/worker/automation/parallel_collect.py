@@ -8,7 +8,12 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from db.staging import clear_staging_run, merge_staged_run, staging_orchestrated
+from db.staging import (
+    clear_staging_run,
+    list_staging_files,
+    merge_staged_run,
+    staging_orchestrated,
+)
 
 from automation.collector_registry import (
     BASE,
@@ -64,45 +69,59 @@ def run_parallel_collectors(
         staging,
         run_id or "-",
     )
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {}
-        for script in targets:
-            extra: dict[str, str] = {}
-            if staging:
-                extra = {
-                    "CI_INGEST_STAGING": "1",
-                    "CI_STAGING_RUN_ID": run_id,
-                    "CI_STAGING_SLOT": Path(script).stem,
-                }
-            futures[pool.submit(run_script, script, cwd=BASE, logger=logger, extra_env=extra)] = (
-                script
-            )
-        for future in as_completed(futures):
-            ok, elapsed = future.result()
-            script = futures[future]
-            timings.append((script, elapsed))
-            if ok:
-                success += 1
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {}
+            for script in targets:
+                extra: dict[str, str] = {}
+                if staging:
+                    extra = {
+                        "CI_INGEST_STAGING": "1",
+                        "CI_STAGING_RUN_ID": run_id,
+                        "CI_STAGING_SLOT": Path(script).stem,
+                    }
+                futures[
+                    pool.submit(run_script, script, cwd=BASE, logger=logger, extra_env=extra)
+                ] = script
+            for future in as_completed(futures):
+                ok, elapsed = future.result()
+                script = futures[future]
+                timings.append((script, elapsed))
+                if ok:
+                    success += 1
 
-    if staging and success == len(targets) and run_id:
-        merge_start = time.perf_counter()
-        try:
-            merge_staged_run(run_id)
-            keep = os.environ.get("CI_STAGING_KEEP", "").strip().lower() in (
-                "1",
-                "true",
-                "yes",
-                "on",
-            )
-            if not keep:
-                clear_staging_run(run_id)
-            merge_ok = True
-        except Exception:
-            logger.exception("Staging merge failed for run_id=%s", run_id)
-            merge_ok = False
-        timings.append(("ingest_staging", time.perf_counter() - merge_start))
-        if not merge_ok:
-            success = max(0, success - 1)
+        staged_files = list_staging_files(run_id) if staging and run_id else []
+        if staged_files:
+            if success < len(targets):
+                logger.warning(
+                    "Merging partial staging run_id=%s (%s/%s collectors succeeded)",
+                    run_id,
+                    success,
+                    len(targets),
+                )
+            merge_start = time.perf_counter()
+            try:
+                merge_staged_run(run_id)
+                keep = os.environ.get("CI_STAGING_KEEP", "").strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                    "on",
+                )
+                if not keep:
+                    clear_staging_run(run_id)
+                merge_ok = True
+            except Exception:
+                logger.exception("Staging merge failed for run_id=%s", run_id)
+                merge_ok = False
+            timings.append(("ingest_staging", time.perf_counter() - merge_start))
+            if not merge_ok:
+                success = max(0, success - 1)
+    finally:
+        if staging:
+            os.environ.pop("CI_STAGING_RUN_ID", None)
+            os.environ.pop("CI_STAGING_SLOT", None)
+            os.environ["CI_INGEST_STAGING"] = "0"
 
     log_timings(logger, timings, top_n=5)
     logger.info(

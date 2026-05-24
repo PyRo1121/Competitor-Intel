@@ -18,7 +18,7 @@ from ci_paths import ensure_app_paths
 ensure_app_paths()
 
 from automation.collector_registry import EXTRACTION_SCRIPTS, get_frequent_sequential
-from automation.pipeline_runner import run_pipeline
+from automation.pipeline_runner import PipelineResult, run_pipeline
 from automation.run_utils import configure_logging, log_timings, run_script
 
 logger = logging.getLogger("frequent_intel")
@@ -31,12 +31,29 @@ def main() -> int:
     logger.info("=== Frequent Competitor Intelligence (no Grok X) ===")
     pipeline_start = time.perf_counter()
 
-    steps: list[str | tuple[str, tuple[str, ...]]] = [
-        ("automation/parallel_collect.py", ("--profile", "frequent")),
-        *EXTRACTION_SCRIPTS,
-        *get_frequent_sequential(),
-    ]
-    result = run_pipeline(steps, logger=logger, run_script_fn=run_script)
+    os.environ.setdefault("CI_INGEST_STAGING", "1")
+    parallel_result = run_pipeline(
+        [("automation/parallel_collect.py", ("--profile", "frequent"))],
+        logger=logger,
+        run_script_fn=run_script,
+    )
+    # parallel_collect clears staging env; ensure sequential steps write SQLite directly.
+    os.environ["CI_INGEST_STAGING"] = "0"
+    os.environ.pop("CI_STAGING_RUN_ID", None)
+    os.environ.pop("CI_STAGING_SLOT", None)
+
+    tail_result = run_pipeline(
+        [*EXTRACTION_SCRIPTS, *get_frequent_sequential()],
+        logger=logger,
+        run_script_fn=run_script,
+    )
+    result = PipelineResult(
+        success=parallel_result.success + tail_result.success,
+        total_steps=parallel_result.total_steps + tail_result.total_steps,
+        timings=[*parallel_result.timings, *tail_result.timings],
+        aborted=parallel_result.aborted or tail_result.aborted,
+        aborted_step=parallel_result.aborted_step or tail_result.aborted_step,
+    )
 
     total_elapsed = time.perf_counter() - pipeline_start
     logger.info("Frequent pipeline wall time: %.1fs", total_elapsed)
