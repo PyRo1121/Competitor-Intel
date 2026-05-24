@@ -6,19 +6,20 @@ Creates structured Markdown notes for tracked companies.
 
 import json
 import logging
-import sqlite3
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 logger = logging.getLogger("obsidian_profiles")
 
-BASE_DIR = Path(__file__).parent
-OBSIDIAN_DIR = BASE_DIR / "obsidian" / "Companies"
-from db.connection import get_conn, DB_PATH
+from ci_paths import OBSIDIAN_DATA_DIR, ensure_app_paths
+
+ensure_app_paths()
+OBSIDIAN_DIR = OBSIDIAN_DATA_DIR / "Companies"
+
+from db.connection import get_conn
+from db.funding_read import fetch_company_funding_rows
 
 
-def get_company_data(company_name: str) -> Optional[Dict]:
+def get_company_data(company_name: str) -> dict | None:
     """Fetch comprehensive data for a single company including funding and signals."""
     conn = get_conn()
     cursor = conn.cursor()
@@ -44,17 +45,7 @@ def get_company_data(company_name: str) -> Optional[Dict]:
     description = row["description"] or "No description available"
     industry = row["industry"] or "Unknown"
 
-    cursor.execute(
-        """
-        SELECT
-            round_type, amount_usd, valuation_usd, announced_date, source
-        FROM funding_events
-        WHERE company_id = ?
-        ORDER BY announced_date DESC
-        """,
-        (company_id,),
-    )
-    funding = cursor.fetchall()
+    funding = fetch_company_funding_rows(cursor, company_id)
 
     cursor.execute(
         """
@@ -84,7 +75,7 @@ def get_company_data(company_name: str) -> Optional[Dict]:
     }
 
 
-def generate_overview(data: Dict) -> str:
+def generate_overview(data: dict) -> str:
     """Generate the overview section for an Obsidian company note."""
     lines = [f"# {data['name']}\n"]
     lines.append(f"> {data['description']}\n")
@@ -96,19 +87,22 @@ def generate_overview(data: Dict) -> str:
     if data["last_github_update"]:
         lines.append(f"- **Last GitHub Activity**: {data['last_github_update']}")
     if data["score"] is not None:
-        lines.append(f"- **Institutional Score**: {data['score']*100:.1f}%")
+        lines.append(f"- **Institutional Score**: {data['score'] * 100:.1f}%")
     lines.append("")
     return "\n".join(lines)
 
 
-def generate_funding(data: Dict) -> str:
+def generate_funding(data: dict) -> str:
     """Generate the funding history section."""
     lines = ["## Funding History\n"]
     if not data["funding"]:
         lines.append("_No funding events recorded._\n")
     else:
         for f in data["funding"]:
-            round_type, amount, valuation, date, source = f
+            round_type = f["round_type"]
+            valuation = f["valuation_usd"]
+            date = f["announced_date"]
+            source = f["source"]
             val_str = f"${valuation / 1_000_000:.1f}M" if valuation else "N/A"
             lines.append(f"- **{date}** — {round_type} ({val_str})")
             if source:
@@ -117,7 +111,7 @@ def generate_funding(data: Dict) -> str:
     return "\n".join(lines)
 
 
-def generate_signals(data: Dict) -> str:
+def generate_signals(data: dict) -> str:
     """Generate the recent signals section."""
     lines = ["## Recent Signals & Activity\n"]
     if not data["signals"]:
@@ -135,7 +129,7 @@ def generate_signals(data: Dict) -> str:
     return "\n".join(lines)
 
 
-def generate_technical(data: Dict) -> str:
+def generate_technical(data: dict) -> str:
     """Generate the technical profile section."""
     lines = ["## Technical Profile\n"]
     lines.append(f"- **GitHub Stars**: {data['github_stars']:,}")
@@ -147,7 +141,7 @@ def generate_technical(data: Dict) -> str:
     return "\n".join(lines)
 
 
-def generate_competitive(data: Dict) -> str:
+def generate_competitive(_data: dict) -> str:
     """Generate the competitive positioning section."""
     lines = ["## Competitive Positioning\n"]
     lines.append("**Strengths**")
@@ -160,7 +154,7 @@ def generate_competitive(data: Dict) -> str:
     return "\n".join(lines)
 
 
-def generate_profile(company_name: str) -> Optional[Path]:
+def generate_profile(company_name: str) -> Path | None:
     """Generate a full multi-section Obsidian note for one company."""
     data = get_company_data(company_name)
     if not data:

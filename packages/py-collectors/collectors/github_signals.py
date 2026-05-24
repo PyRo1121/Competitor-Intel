@@ -7,7 +7,6 @@ Requires GITHUB_TOKEN environment variable for higher rate limits.
 
 import logging
 import os
-from datetime import datetime
 
 logger = logging.getLogger("github_signals")
 

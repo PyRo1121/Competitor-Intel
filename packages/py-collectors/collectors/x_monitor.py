@@ -4,13 +4,13 @@ X Monitoring — Grok 4.3 native search interface + DB persistence.
 Grok runs X queries; call process_grok_x_results() or store_grok_batch() to persist.
 """
 
-from typing import Any, Dict, List, Optional, Optional
+import logging
+from typing import Any
+
+from db.ingest import get_company_id, insert_x_post
 
 from collectors.sources_registry import get_x_monitor_queries
 from collectors.x_signal_collector import store_grok_batch, store_x_signal
-from db.ingest import get_company_id, insert_x_post
-
-import logging
 
 logger = logging.getLogger("x_monitor")
 
@@ -20,7 +20,7 @@ def fetch_recent_x_activity(company_x_handle: str, days: int = 3) -> str:
     return get_x_query_prompt(company_x_handle, days)
 
 
-def process_grok_x_results(company_name: str, grok_results: List[Dict[str, Any]]) -> int:
+def process_grok_x_results(company_name: str, grok_results: list[dict[str, Any]]) -> int:
     """
     Process Grok JSON array: writes x_posts (when company matches) and raw_signals.
     """
@@ -52,8 +52,8 @@ def process_grok_x_results(company_name: str, grok_results: List[Dict[str, Any]]
 
 def process_grok_query_results(
     query: str,
-    grok_results: List[Dict[str, Any]],
-    company_name: Optional[str] = None,
+    grok_results: list[dict[str, Any]],
+    company_name: str | None = None,
 ) -> int:
     """Store ad-hoc Grok search results (global queries, not tied to one company)."""
     return store_grok_batch(query, grok_results, company_name=company_name)
@@ -72,12 +72,17 @@ Return ONLY a JSON array with this exact structure for each post:
     "retweets": number,
     "replies": number,
     "url": "https://x.com/...",
+    "urls": ["https://techcrunch.com/...", "other outbound article URLs from the post"],
     "is_founder_post": true/false,
-    "sentiment": number between -1 and 1
+    "sentiment": number between -1 and 1,
+    "companies_detected": ["CompanyName"]
   }}
 ]
-Only include posts with meaningful product, funding, or hiring signals. Ignore pure engagement posts."""
+Include every outbound https URL in "urls" (press articles, company blogs, SEC filings)
+— not x.com links.
+Only include posts with meaningful product, funding, or hiring signals.
+Ignore pure engagement posts."""
 
 
-def list_default_queries() -> List[str]:
+def list_default_queries() -> list[str]:
     return get_x_monitor_queries()

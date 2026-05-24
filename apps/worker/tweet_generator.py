@@ -7,13 +7,10 @@ These are plain text drafts; no posting to any platform occurs.
 """
 
 import logging
-import sqlite3
-from datetime import datetime
-from pathlib import Path
 
 logger = logging.getLogger("report_generator")
 
-from db.connection import get_conn, DB_PATH
+from db.connection import get_conn
 
 
 def generate_reports(limit: int = 6) -> list[dict]:
@@ -60,10 +57,10 @@ def generate_reports(limit: int = 6) -> list[dict]:
 
         summary = f"""{hook}
 
-Event: {event['event_type']}
+Event: {event["event_type"]}
 Confidence: {confidence:.0%}
-Source: {event['source'] or 'Unknown'}
-Status: {'Rumor (unconfirmed)' if is_rumor else 'Confirmed'}
+Source: {event["source"] or "Unknown"}
+Status: {"Rumor (unconfirmed)" if is_rumor else "Confirmed"}
 """
 
         reports.append(
@@ -81,5 +78,5 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     reports = generate_reports(4)
     for r in reports:
-        logger.info("\n=== %s ===", r['company'])
+        logger.info("\n=== %s ===", r["company"])
         logger.info(r["summary"])

@@ -15,24 +15,23 @@ import logging
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 
 logger = logging.getLogger("daily_brief")
 
-from db.connection import get_conn, DB_PATH
 from ci_paths import EXPORTS_DIR
+from db.connection import get_conn
 
 EXPORT_DIR = EXPORTS_DIR
 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def generate_daily_brief(days: int = 7, event_limit: int = 15) -> Dict:
+def generate_daily_brief(days: int = 7, event_limit: int = 15) -> dict:
     """Generate a daily intelligence brief.
-    
+
     Args:
         days: Lookback period for events
         event_limit: Max events to include
-        
+
     Returns:
         Dict with brief data
     """
@@ -44,8 +43,9 @@ def generate_daily_brief(days: int = 7, event_limit: int = 15) -> Dict:
 
     try:
         # Get high-value recent events
-        cursor.execute("""
-            SELECT 
+        cursor.execute(
+            """
+            SELECT
                 ie.id,
                 ie.event_type,
                 c.name as company,
@@ -61,31 +61,36 @@ def generate_daily_brief(days: int = 7, event_limit: int = 15) -> Dict:
             FROM intelligence_events ie
             LEFT JOIN companies c ON c.id = ie.company_id
             WHERE ie.created_at >= datetime('now', ?)
-            ORDER BY 
+            ORDER BY
                 ie.confidence DESC,
                 CASE WHEN ie.amount_usd IS NULL THEN 0 ELSE ie.amount_usd END DESC
             LIMIT ?
-        """, (f"-{days} days", event_limit))
+        """,
+            (f"-{days} days", event_limit),
+        )
         events = cursor.fetchall()
 
         # Top companies by score
         cursor.execute("""
             SELECT name, score, industry
-            FROM companies 
-            WHERE score IS NOT NULL 
-            ORDER BY score DESC 
+            FROM companies
+            WHERE score IS NOT NULL
+            ORDER BY score DESC
             LIMIT 10
         """)
         top_companies = cursor.fetchall()
 
         # Signal counts by source for context
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT source, COUNT(*) as count
             FROM raw_signals
             WHERE detected_at >= datetime('now', ?)
             GROUP BY source
             ORDER BY count DESC
-        """, (f"-{days} days",))
+        """,
+            (f"-{days} days",),
+        )
         signal_counts = cursor.fetchall()
 
     except sqlite3.Error as e:
@@ -108,37 +113,45 @@ def generate_daily_brief(days: int = 7, event_limit: int = 15) -> Dict:
     }
 
     for e in events:
-        brief["events"].append({
-            "id": e["id"],
-            "type": e["event_type"],
-            "company": e["company"] or "Unknown",
-            "round": e["round_type"],
-            "amount_usd": e["amount_usd"],
-            "valuation_usd": e["valuation_usd"],
-            "investor": e["lead_investor"] or e["counterparty"],
-            "is_rumor": bool(e["is_rumor"]),
-            "confidence": round(e["confidence"] or 0, 2),
-            "source": e["source"],
-            "created_at": e["created_at"],
-        })
+        brief["events"].append(
+            {
+                "id": e["id"],
+                "type": e["event_type"],
+                "company": e["company"] or "Unknown",
+                "round": e["round_type"],
+                "amount_usd": e["amount_usd"],
+                "valuation_usd": e["valuation_usd"],
+                "investor": e["lead_investor"] or e["counterparty"],
+                "is_rumor": bool(e["is_rumor"]),
+                "confidence": round(e["confidence"] or 0, 2),
+                "source": e["source"],
+                "created_at": e["created_at"],
+            }
+        )
 
     for c in top_companies:
-        brief["top_companies"].append({
-            "name": c["name"],
-            "score": round(c["score"] or 0, 2),
-            "industry": c["industry"],
-        })
+        brief["top_companies"].append(
+            {
+                "name": c["name"],
+                "score": round(c["score"] or 0, 2),
+                "industry": c["industry"],
+            }
+        )
 
     for s in signal_counts:
         brief["signal_counts"][s["source"]] = s["count"]
 
-    logger.info("Brief generated: %s events, %s companies", len(brief['events']), len(brief['top_companies']))
+    logger.info(
+        "Brief generated: %s events, %s companies",
+        len(brief["events"]),
+        len(brief["top_companies"]),
+    )
     return brief
 
 
-def export_brief(brief: Dict) -> Dict[str, Path]:
+def export_brief(brief: dict) -> dict[str, Path]:
     """Export brief to JSON and CSV.
-    
+
     Returns:
         Dict mapping format to file path
     """
@@ -160,24 +173,37 @@ def export_brief(brief: Dict) -> Dict[str, Path]:
     try:
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
-            writer.writerow([
-                "id", "company", "event_type", "round", "amount_usd",
-                "valuation_usd", "investor", "is_rumor", "confidence", "source", "created_at"
-            ])
+            writer.writerow(
+                [
+                    "id",
+                    "company",
+                    "event_type",
+                    "round",
+                    "amount_usd",
+                    "valuation_usd",
+                    "investor",
+                    "is_rumor",
+                    "confidence",
+                    "source",
+                    "created_at",
+                ]
+            )
             for e in brief["events"]:
-                writer.writerow([
-                    e["id"],
-                    e["company"],
-                    e["type"],
-                    e["round"] or "",
-                    e["amount_usd"] or "",
-                    e["valuation_usd"] or "",
-                    e["investor"] or "",
-                    "true" if e["is_rumor"] else "false",
-                    e["confidence"],
-                    e["source"] or "",
-                    e["created_at"] or "",
-                ])
+                writer.writerow(
+                    [
+                        e["id"],
+                        e["company"],
+                        e["type"],
+                        e["round"] or "",
+                        e["amount_usd"] or "",
+                        e["valuation_usd"] or "",
+                        e["investor"] or "",
+                        "true" if e["is_rumor"] else "false",
+                        e["confidence"],
+                        e["source"] or "",
+                        e["created_at"] or "",
+                    ]
+                )
         paths["csv"] = csv_path
         logger.info("CSV exported: %s", csv_path)
     except Exception as e:
@@ -186,7 +212,7 @@ def export_brief(brief: Dict) -> Dict[str, Path]:
     return paths
 
 
-def format_for_discord(brief: Dict) -> Dict:
+def format_for_discord(brief: dict) -> dict:
     """Format brief as Discord embed."""
     embed = {
         "title": brief["title"],
@@ -202,42 +228,50 @@ def format_for_discord(brief: Dict) -> Dict:
         for e in brief["events"][:8]:
             rumor = " ⚠️ RUMOR" if e["is_rumor"] else ""
             amt = format_amount(e["amount_usd"]) if e["amount_usd"] else "Undisclosed"
-            lines.append(f"**{e['company']}** — {e['type']} {amt}{rumor}\n"
-                        f"Confidence: {e['confidence']:.0%}")
-        embed["fields"].append({
-            "name": f"🔥 High-Signal Events ({len(brief['events'])})",
-            "value": "\n\n".join(lines),
-            "inline": False,
-        })
+            lines.append(
+                f"**{e['company']}** — {e['type']} {amt}{rumor}\nConfidence: {e['confidence']:.0%}"
+            )
+        embed["fields"].append(
+            {
+                "name": f"🔥 High-Signal Events ({len(brief['events'])})",
+                "value": "\n\n".join(lines),
+                "inline": False,
+            }
+        )
 
     # Top companies section
     if brief["top_companies"]:
-        top = "\n".join([
-            f"• **{c['name']}** — {c['score']:.2f}"
-            for c in brief["top_companies"][:8]
-        ])
-        embed["fields"].append({
-            "name": "🏆 Top Companies",
-            "value": top,
-            "inline": False,
-        })
+        top = "\n".join(
+            [f"• **{c['name']}** — {c['score']:.2f}" for c in brief["top_companies"][:8]]
+        )
+        embed["fields"].append(
+            {
+                "name": "🏆 Top Companies",
+                "value": top,
+                "inline": False,
+            }
+        )
 
     # Signal sources
     if brief.get("signal_counts"):
-        sources = "\n".join([
-            f"• {source}: {count} signals"
-            for source, count in list(brief["signal_counts"].items())[:6]
-        ])
-        embed["fields"].append({
-            "name": "📊 Signal Sources",
-            "value": sources,
-            "inline": False,
-        })
+        sources = "\n".join(
+            [
+                f"• {source}: {count} signals"
+                for source, count in list(brief["signal_counts"].items())[:6]
+            ]
+        )
+        embed["fields"].append(
+            {
+                "name": "📊 Signal Sources",
+                "value": sources,
+                "inline": False,
+            }
+        )
 
     return embed
 
 
-def format_amount(amount: Optional[int]) -> str:
+def format_amount(amount: int | None) -> str:
     """Format USD amount human-readably."""
     if not amount:
         return "Undisclosed"
@@ -253,6 +287,7 @@ def format_amount(amount: Optional[int]) -> str:
 def main():
     """CLI entry point for daily brief generation."""
     import argparse
+
     parser = argparse.ArgumentParser(description="Generate daily intelligence brief")
     parser.add_argument("--days", type=int, default=7, help="Lookback period")
     parser.add_argument("--export", action="store_true", help="Export to files")
@@ -262,25 +297,37 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     brief = generate_daily_brief(days=args.days)
-    
+
     if "error" in brief:
-        logger.error("Error: %s", brief['error'])
+        logger.error("Error: %s", brief["error"])
         return 1
 
-    logger.info("=== %s ===", brief['title'])
-    logger.info("Date: %s | Events: %s | Companies: %s", brief['date'], len(brief['events']), len(brief['top_companies']))
-    
+    logger.info("=== %s ===", brief["title"])
+    logger.info(
+        "Date: %s | Events: %s | Companies: %s",
+        brief["date"],
+        len(brief["events"]),
+        len(brief["top_companies"]),
+    )
+
     if brief["events"]:
         logger.info("Top Events:")
         for e in brief["events"][:5]:
             rumor = " [RUMOR]" if e["is_rumor"] else ""
             amt = format_amount(e["amount_usd"])
-            logger.info("  • %s: %s (%s)%s — %.0f%% confidence", e['company'], e['type'], amt, rumor, e['confidence']*100)
-    
+            logger.info(
+                "  • %s: %s (%s)%s — %.0f%% confidence",
+                e["company"],
+                e["type"],
+                amt,
+                rumor,
+                e["confidence"] * 100,
+            )
+
     if brief["top_companies"]:
         logger.info("Top Companies:")
         for c in brief["top_companies"][:5]:
-            logger.info("  • %s: %.2f", c['name'], c['score'])
+            logger.info("  • %s: %.2f", c["name"], c["score"])
 
     if args.export:
         paths = export_brief(brief)

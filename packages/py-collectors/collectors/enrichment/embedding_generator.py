@@ -10,7 +10,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 import numpy as np
 
@@ -27,7 +26,7 @@ OLLAMA_EMBEDDINGS_URL = f"{OLLAMA_BASE}/api/embeddings"
 EMBED_MODEL = "nomic-embed-text"
 
 
-def get_embedding(text: str, model: str = EMBED_MODEL) -> Optional[List[float]]:
+def get_embedding(text: str, model: str = EMBED_MODEL) -> list[float] | None:
     """Generate embedding via Ollama HTTP API (/api/embed, fallback /api/embeddings)."""
     if not text or not text.strip():
         return None
@@ -56,7 +55,7 @@ def get_embedding(text: str, model: str = EMBED_MODEL) -> Optional[List[float]]:
     return None
 
 
-def cosine_similarity(a: List[float], b: List[float]) -> float:
+def cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two embeddings."""
     if not a or not b or len(a) != len(b):
         return 0.0
@@ -73,14 +72,17 @@ def embed_company_profiles(limit: int = 100) -> int:
     conn = get_conn()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT cd.id, c.name, cd.description_long, cd.business_model,
                cd.tech_stack, cd.headquarters, cd.team_size
         FROM company_details cd
         JOIN companies c ON c.id = cd.company_id
         WHERE cd.embedding IS NULL
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
 
     rows = cursor.fetchall()
     embedded = 0
@@ -102,9 +104,12 @@ def embed_company_profiles(limit: int = 100) -> int:
         embedding = get_embedding(text)
 
         if embedding:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE company_details SET embedding = ? WHERE id = ?
-            """, (json.dumps(embedding), row["id"]))
+            """,
+                (json.dumps(embedding), row["id"]),
+            )
             conn.commit()
             embedded += 1
             logger.info("Embedded company profile: %s", row["name"])
@@ -121,14 +126,17 @@ def embed_funding_rounds(limit: int = 200) -> int:
     conn = get_conn()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT fr.id, c.name, fr.round_type, fr.amount_usd,
                fr.valuation_usd, fr.lead_investor
         FROM funding_rounds fr
         JOIN companies c ON c.id = fr.company_id
         WHERE fr.embedding IS NULL
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
 
     rows = cursor.fetchall()
     embedded = 0
@@ -145,9 +153,12 @@ def embed_funding_rounds(limit: int = 200) -> int:
         embedding = get_embedding(text)
 
         if embedding:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE funding_rounds SET embedding = ? WHERE id = ?
-            """, (json.dumps(embedding), row["id"]))
+            """,
+                (json.dumps(embedding), row["id"]),
+            )
             conn.commit()
             embedded += 1
 
@@ -161,13 +172,16 @@ def embed_intelligence_events(limit: int = 300) -> int:
     conn = get_conn()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT ie.id, c.name, ie.event_type, ie.amount_usd, ie.source
         FROM intelligence_events ie
         LEFT JOIN companies c ON c.id = ie.company_id
         WHERE ie.embedding IS NULL
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
 
     rows = cursor.fetchall()
     embedded = 0
@@ -181,9 +195,12 @@ def embed_intelligence_events(limit: int = 300) -> int:
         embedding = get_embedding(text)
 
         if embedding:
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE intelligence_events SET embedding = ? WHERE id = ?
-            """, (json.dumps(embedding), row["id"]))
+            """,
+                (json.dumps(embedding), row["id"]),
+            )
             conn.commit()
             embedded += 1
 
@@ -210,6 +227,6 @@ def run_embedding_generation() -> dict:
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
     run_embedding_generation()

@@ -1,23 +1,16 @@
 <script lang="ts">
-	import { onMount } from "svelte";
+	import { createQuery } from "@tanstack/svelte-query";
 	import { getCompanies } from "$lib/api";
 	import SearchBar from "$lib/components/SearchBar.svelte";
 	import PageHeader from "$lib/components/PageHeader.svelte";
 	import { ArrowUpRight, Star } from "lucide-svelte";
 
-	let companies: Record<string, unknown>[] = $state([]);
-	let loading = $state(true);
+	const companiesQuery = createQuery(() => ({
+		queryKey: ["companies", "score"],
+		queryFn: () => getCompanies("score"),
+	}));
 
-	onMount(async () => {
-		try {
-			const res = await getCompanies("score");
-			companies = res.companies || [];
-		} catch (e) {
-			console.error(e);
-		} finally {
-			loading = false;
-		}
-	});
+	const companies = $derived(companiesQuery.data?.companies ?? []);
 
 	function statusClass(status: string) {
 		const map: Record<string, string> = {
@@ -37,7 +30,7 @@
 		{/snippet}
 	</PageHeader>
 
-	{#if loading}
+	{#if companiesQuery.isPending}
 		<div class="space-y-3">
 			{#each [1, 2, 3, 4, 5] as _}
 				<div class="ci-skeleton h-16"></div>

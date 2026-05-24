@@ -1,14 +1,14 @@
 """Core type definitions and enums."""
 
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class SignalType(str, Enum):
+class SignalType(StrEnum):
     """Types of raw signals."""
-    
+
     FUNDING_NEWS = "funding_news"
     PRODUCT_UPDATE = "product_update"
     SOCIAL_MOMENTUM = "social_momentum"
@@ -19,9 +19,9 @@ class SignalType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     """Types of intelligence events."""
-    
+
     FUNDING_ROUND = "funding_round"
     ACQUISITION = "acquisition"
     PARTNERSHIP = "partnership"
@@ -32,9 +32,9 @@ class EventType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class SourceType(str, Enum):
+class SourceType(StrEnum):
     """Signal sources."""
-    
+
     TECHCRUNCH = "techcrunch"
     RSS = "rss"
     GITHUB = "github"
@@ -44,9 +44,9 @@ class SourceType(str, Enum):
     MANUAL = "manual"
 
 
-class CollectorStatus(str, Enum):
+class CollectorStatus(StrEnum):
     """Collector run status."""
-    
+
     SUCCESS = "success"
     PARTIAL = "partial"
     FAILED = "failed"
@@ -56,7 +56,7 @@ class CollectorStatus(str, Enum):
 
 class CollectorResult(BaseModel):
     """Result from a collector run."""
-    
+
     collector_name: str
     status: CollectorStatus
     signals_collected: int = 0
@@ -68,7 +68,7 @@ class CollectorResult(BaseModel):
 
 class CollectorMetrics(BaseModel):
     """Metrics for collector performance tracking."""
-    
+
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0

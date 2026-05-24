@@ -11,30 +11,31 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+from db.connection import get_conn
+from db.ingest import get_company_id, insert_raw_signal_dedup, url_dedup_key
 
 from collectors.rss_collector import extract_company_mentions, load_company_names
 from collectors.sources_registry import get_x_monitor_queries
-from db.connection import get_conn
-from db.ingest import get_company_id, insert_raw_signal_dedup, url_dedup_key
 
 logger = logging.getLogger("x_signal_collector")
 
 X_QUERIES = get_x_monitor_queries()
 
 
-def _extract_urls(text: str) -> List[str]:
+def _extract_urls(text: str) -> list[str]:
     return re.findall(r"https?://[^\s\])\"']+", text or "")
 
 
-def _extract_mentions(text: str) -> List[str]:
+def _extract_mentions(text: str) -> list[str]:
     return list({m.lower() for m in re.findall(r"@([A-Za-z0-9_]{1,15})", text or "")})
 
 
-def _names_from_handles(cursor, handles: List[str]) -> List[str]:
-    names: List[str] = []
+def _names_from_handles(cursor, handles: list[str]) -> list[str]:
+    names: list[str] = []
     for handle in handles:
         cursor.execute(
             "SELECT name FROM companies WHERE LOWER(REPLACE(x_handle, '@', '')) = ? COLLATE NOCASE",
@@ -49,12 +50,12 @@ def _names_from_handles(cursor, handles: List[str]) -> List[str]:
 def extract_companies_from_x_post(
     text: str,
     author: str,
-    grok_companies: List[str],
-    company_names: List[str],
+    grok_companies: list[str],
+    company_names: list[str],
     cursor,
-) -> List[str]:
+) -> list[str]:
     """Merge Grok hints, @handle lookups, and DB-backed substring matching."""
-    detected: List[str] = []
+    detected: list[str] = []
     seen: set[str] = set()
 
     def add(name: str) -> None:
@@ -83,9 +84,9 @@ def extract_companies_from_x_post(
 
 def resolve_company_id(
     cursor,
-    companies: List[str],
-    explicit_name: Optional[str] = None,
-) -> Optional[int]:
+    companies: list[str],
+    explicit_name: str | None = None,
+) -> int | None:
     if explicit_name:
         cid = get_company_id(explicit_name)
         if cid:
@@ -106,7 +107,9 @@ def resolve_company_id(
 
 def classify_x_signal(text: str) -> str:
     lower = (text or "").lower()
-    if any(w in lower for w in ("raised", "funding", "series a", "series b", "seed round", "pre-seed")):
+    if any(
+        w in lower for w in ("raised", "funding", "series a", "series b", "seed round", "pre-seed")
+    ):
         return "funding"
     if any(w in lower for w in ("launch", "launched", "introducing", "announcing", "shipped")):
         return "product_launch"
@@ -119,9 +122,9 @@ def classify_x_signal(text: str) -> str:
 
 def _normalize_result(
     query: str,
-    result: Dict[str, Any],
-    companies_detected: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    result: dict[str, Any],
+    companies_detected: list[str] | None = None,
+) -> dict[str, Any]:
     text = result.get("text") or result.get("content") or ""
     url = result.get("url") or result.get("post_url") or ""
     post_id = str(result.get("post_id") or result.get("id") or "")
@@ -156,7 +159,7 @@ def _normalize_result(
     }
 
 
-def dedup_key_for_result(result: Dict[str, Any]) -> str:
+def dedup_key_for_result(result: dict[str, Any]) -> str:
     post_id = result.get("post_id") or ""
     url = result.get("url") or ""
     if post_id:
@@ -169,12 +172,12 @@ def dedup_key_for_result(result: Dict[str, Any]) -> str:
 
 def store_x_signal(
     query: str,
-    result: Dict[str, Any],
-    company_id: Optional[int] = None,
-    company_name: Optional[str] = None,
+    result: dict[str, Any],
+    company_id: int | None = None,
+    company_name: str | None = None,
     *,
     cursor=None,
-    company_names: Optional[List[str]] = None,
+    company_names: list[str] | None = None,
     commit: bool = True,
 ) -> bool:
     """Store one Grok/X result into raw_signals."""
@@ -195,15 +198,18 @@ def store_x_signal(
         companies = extract_companies_from_x_post(text, author, list(grok_companies), names, cursor)
         if company_name and company_name not in companies:
             companies.insert(0, company_name)
-        resolved_id = company_id or resolve_company_id(cursor, companies, explicit_name=company_name)
+        resolved_id = company_id or resolve_company_id(
+            cursor, companies, explicit_name=company_name
+        )
         payload = _normalize_result(query, result, companies_detected=companies)
         stored = insert_raw_signal_dedup(
             cursor,
             "x",
-            payload.get("url") or f"x://post/{payload.get('post_id') or dedup_key_for_result(payload)}",
+            payload.get("url")
+            or f"x://post/{payload.get('post_id') or dedup_key_for_result(payload)}",
             payload,
             company_id=resolved_id,
-            detected_at=datetime.now(timezone.utc).isoformat(),
+            detected_at=datetime.now(UTC).isoformat(),
             dedup_key=dedup_key_for_result(payload),
         )
         if stored and commit and own_conn and conn is not None:
@@ -216,8 +222,8 @@ def store_x_signal(
 
 def store_grok_batch(
     query: str,
-    results: List[Dict[str, Any]],
-    company_name: Optional[str] = None,
+    results: list[dict[str, Any]],
+    company_name: str | None = None,
 ) -> int:
     """Store multiple Grok results for one search query."""
     if not results:
@@ -244,7 +250,7 @@ def store_grok_batch(
     return inserted
 
 
-def load_grok_results_from_env() -> List[Dict[str, Any]]:
+def load_grok_results_from_env() -> list[dict[str, Any]]:
     """
     Optional batch ingest: set GROK_X_RESULTS_PATH to a JSON file:
     [{"query": "...", "results": [{...}, ...]}, ...]
@@ -306,7 +312,7 @@ def run_x_collection() -> int:
     """
     Entry point for parallel_collect / daily_intel.
     Ingests GROK_X_RESULTS_PATH; with CI_AUTO_GROK_X fetches via Grok x_search first.
-  """
+    """
     try:
         if _env_flag("CI_AUTO_GROK_X") or _env_flag("CI_REQUIRE_GROK_X"):
             _ensure_grok_batch_file()

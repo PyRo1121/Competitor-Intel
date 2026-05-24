@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { getDB } from "../db";
+import { getDB, getWriteDB } from "../db";
+import { requireApiKey } from "../middleware/auth";
 
 const app = new Hono();
 
@@ -13,7 +14,7 @@ app.get("/", (c) => {
     LEFT JOIN companies c ON c.id = rs.company_id
     WHERE rs.source LIKE '%discovery%'
   `;
-  
+
   if (source) {
     query += ` AND rs.source = ?`;
   }
@@ -28,10 +29,7 @@ app.get("/", (c) => {
 app.get("/candidates", (c) => {
   const db = getDB();
   const rawLimit = Number(c.req.query("limit"));
-  const limit = Math.min(
-    Math.max(Number.isFinite(rawLimit) ? rawLimit : 25, 1),
-    100,
-  );
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 25, 1), 100);
 
   const candidates = db
     .prepare(
@@ -51,7 +49,8 @@ app.get("/candidates", (c) => {
 app.get("/github-orgs", (c) => {
   const db = getDB();
 
-  const orgs = db.prepare(`
+  const orgs = db
+    .prepare(`
     SELECT DISTINCT 
       json_extract(rs.data_json, '$.metadata.org_name') as org_name,
       json_extract(rs.data_json, '$.metadata.stars') as stars,
@@ -62,7 +61,8 @@ app.get("/github-orgs", (c) => {
     WHERE rs.source = 'github_discovery'
     ORDER BY CAST(json_extract(rs.data_json, '$.metadata.stars') AS INTEGER) DESC
     LIMIT 20
-  `).all();
+  `)
+    .all();
 
   return c.json({ orgs });
 });
@@ -70,20 +70,22 @@ app.get("/github-orgs", (c) => {
 app.get("/product-hunt", (c) => {
   const db = getDB();
 
-  const launches = db.prepare(`
+  const launches = db
+    .prepare(`
     SELECT rs.*, c.name as company_name
     FROM raw_signals rs
     LEFT JOIN companies c ON c.id = rs.company_id
     WHERE rs.source = 'product_hunt_discovery'
     ORDER BY rs.detected_at DESC
     LIMIT 20
-  `).all();
+  `)
+    .all();
 
   return c.json({ launches });
 });
 
-app.post("/add-company", async (c) => {
-  const db = getDB();
+app.post("/add-company", requireApiKey(), async (c) => {
+  const db = getWriteDB();
   const body = await c.req.json();
 
   const { name, slug, website, x_handle, github_org, industry } = body;
@@ -93,10 +95,19 @@ app.post("/add-company", async (c) => {
   }
 
   try {
-    const result = db.prepare(`
+    const result = db
+      .prepare(`
       INSERT OR IGNORE INTO companies (name, slug, website, x_handle, github_org, industry)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(name, slug, website || null, x_handle || null, github_org || null, industry || "AI/Productivity");
+    `)
+      .run(
+        name,
+        slug,
+        website || null,
+        x_handle || null,
+        github_org || null,
+        industry || "AI/Productivity",
+      );
 
     if (result.changes === 0) {
       return c.json({ error: "Company already exists", slug }, 409);

@@ -1,6 +1,6 @@
 # Competitor Intelligence — Technical Handbook
 
-**For AI agents taking over this project.** Read this entire document before making any changes.
+**For AI agents:** [ROADMAP.md](ROADMAP.md) (what to build) → this handbook (how it works). Index: [README.md](README.md).
 
 ## 1. Project Overview
 
@@ -16,7 +16,7 @@ The project has **two parallel architectures**. This is critical to understand.
 
 ### Version A: Operational monorepo packages (DAILY)
 - Collectors: `packages/py-collectors/collectors/`
-- SQLite + ingest: `packages/py-core/db/` (`get_conn`, `insert_raw_signal_dedup`)
+- SQLite + ingest: `packages/py-core/db/` (`get_conn`, `insert_raw_signal_dedup`) — see [SQLITE.md](SQLITE.md)
 - Worker orchestration: `apps/worker/automation/` (`collector_registry.py`, `daily_intel.py`)
 - **This is what runs daily.**
 
@@ -95,19 +95,39 @@ See **[SCHEDULING.md](SCHEDULING.md)** for cron examples (hourly RSS, 5×/day Ea
 |---------|------|
 | `make frequent` | RSS / HN / open web + `signal_processor` (no X quota) |
 | `make grok-refresh` | Hermes `x_search` + X ingest + reprocess |
-| `make daily-tiered` | Full daily with `CI_SKIP_GROK_X=1` after Grok cron |
+| `make full-sweep` | On-demand: full daily first, enriched X queries (DB labels + optional AI), then X ingest |
+| `make daily` / `make daily-tiered` | Full daily with `CI_SKIP_GROK_X=1` (no inline Grok) |
+| `make daily-prod` | Production cron: `CI_STRICT_PIPELINE=1`, dedup index required |
+| `make enrich-all-export` / `make enrich-all-apply` | Hermes queues: export JSONL → agent → apply (see `data/hermes_enrich/`) |
+| `make enterprise-check` | CI bar: compile, test-cov, intel-gate, golden-eval, API smoke (`bun test`) |
+| `make intel-all` | Repair + gate + test-cov + golden-eval (pre-ship data quality) |
+
+**CI / Hermes env (optional):** `CI_DISABLE_HERMES=1` or `CI_SKIP_GROK_X=1` skips paid Grok batch in CI and tiered daily; `CI_ENTERPRISE_RSS=1` runs shadow enterprise RSS (off by default). API: `CI_API_KEY` for mutations, `CI_API_CORS_ORIGINS` comma-separated allowlist.
+
+**Pipeline strict (production):** `CI_STRICT_PIPELINE=1` blocks legacy CLI collectors that bypass `signal_processor` + rollups (`funding_collector`, `enhanced_funding_detector`, `big_deals_collector`, `funding_rumor_detector`). Use **`make daily-prod`** on prod cron. **`CI_REQUIRE_DEDUP_INDEX=1`** fails `init_database` if `idx_raw_signals_dedup` cannot be created (run **`make migrate-dedup`** first). **`make claims-audit`** prints claim table counts; **`CI_CLAIMS_AUDIT_STRICT=1`** (via `make claims-audit-strict` / `enterprise-check`) fails on missing claim tables/columns or `CI_CLAIMS_ACTIONABLE_MISSED_MAX` (default `0`). Empty dev DB passes strict audit.
+
+Pipeline reference: **[PIPELINE.md](PIPELINE.md)** (signals layer, structured rollups, commands).
 
 ### Daily Pipeline (`apps/worker/daily_intel.py`)
-Parallel ingest (RSS, HN, EDGAR, YC, etc.) then sequential:
-1. `signal_url_fanout.py` — Article URLs from X/HN
-2. `signal_processor.py` — `raw_signals` → `intelligence_events`
-3. **`candidate_discovery.py`** → **`auto_promote.py`** → **`company_ranker.py`**
-4. `scripts/phase_b_populate_funding.py` — Funding claims → rounds
-5. Enrichment, embeddings, alerts, brief export
 
-Company profile web scrape (`scripts/phase_b_populate_company.py`) is **opt-in** via `make phase-b-company`, not default daily (slow / rate-limited sources).
+**Canonical entry:** `make daily` → `apps/worker/daily_intel.py` (**abort on any step failure** unless `--force`). Registry: `apps/worker/automation/collector_registry.py`.
 
-**To add a new collector**: Create the file under `packages/py-collectors/collectors/`, add a `run()` function, and register it in `apps/worker/automation/collector_registry.py`.
+Parallel ingest (RSS, HN, EDGAR, YC, etc.) → `run_intel.py` (schema/embeddings) → sequential:
+1. `website_monitor.py`, `signal_url_fanout.py`, jobs/tech stack/investors
+2. `signal_processor.py` — `raw_signals` → `intelligence_events` (canonical path; not `funding_collector` in daily)
+3. `signal_repair.py` — backfill labels / company links before gate
+4. `intel_quality_gate.py` — pipeline quality thresholds (same as `make intel-gate`); failure skips rollups
+5. `candidate_discovery.py` → `auto_promote.py` → `company_ranker.py`
+6. `funding_rollup.py` — funding claims → rounds
+7. Enrichment, embeddings, alerts (`alert_engine.py` reserves `alerts_sent` before Discord send), brief export
+
+**Dedup:** `make migrate-dedup` once per DB; ingest uses `idx_raw_signals_dedup` + `IntegrityError` handling in `db/ingest.py`.
+
+Company, regulatory, and cap-table rollups run **after `funding_rollup` by default** on daily (opt out with `CI_COMPANY_DATA_ROLLUP=0`, etc.). On-demand only: `make company-data-rollup`.
+
+**Hermes enrich (weekly):** `make enrich-all-export` writes `data/hermes_enrich/*_queue.jsonl`. Run the Hermes agent on those files, then `make enrich-all-apply`. Queue depth appears on `GET /api/status` under `enrichQueues`.
+
+**To add a new collector**: Create the file under `packages/py-collectors/collectors/`, add a `run()` function, and register it in `apps/worker/automation/collector_registry.py` (parallel/sequential schedule and/or `INTEL_CLI_COLLECTORS`). `tests/test_collector_registry.py` fails if a script has `__main__` but is not registered.
 
 ### Ingestion conventions (collectors)
 

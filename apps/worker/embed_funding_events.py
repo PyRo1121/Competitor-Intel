@@ -5,9 +5,11 @@ Embed all funding events using qwen3-embedding:4b.
 import json
 import logging
 import sqlite3
+from contextlib import suppress
+
+from ci_paths import db_path
 
 from embeddings import get_embedding
-from ci_paths import db_path
 
 logger = logging.getLogger("embed_funding_events")
 
@@ -20,10 +22,8 @@ def embed_funding_events():
     cursor = conn.cursor()
 
     # Add embedding column
-    try:
+    with suppress(sqlite3.OperationalError):
         cursor.execute("ALTER TABLE funding_events ADD COLUMN embedding BLOB")
-    except sqlite3.OperationalError:
-        pass  # column already exists
 
     cursor.execute(
         """
@@ -37,7 +37,10 @@ def embed_funding_events():
     logger.info("Embedding %s funding events...", len(rows))
 
     for event_id, round_type, amount, lead, date in rows:
-        text = f"{round_type or ''} round of ${amount or 0:,} led by {lead or 'Unknown'} on {date or ''}"
+        text = (
+            f"{round_type or ''} round of ${amount or 0:,} "
+            f"led by {lead or 'Unknown'} on {date or ''}"
+        )
         try:
             embedding = get_embedding(text)
             cursor.execute(

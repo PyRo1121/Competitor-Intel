@@ -8,6 +8,7 @@ version = "2.1.0"
 description = "DB, utils, alerts, and shared config for Competitor Intel"
 requires-python = ">=3.11"
 dependencies = [
+    "curl-cffi>=0.7.0",
     "httpx>=0.28.1",
     "pyyaml>=6.0.2",
     "structlog>=25.4.0",

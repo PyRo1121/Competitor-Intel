@@ -1,6 +1,7 @@
 """Command-line interface for competitor intelligence."""
 
 import asyncio
+from typing import Annotated
 
 import structlog
 import typer
@@ -60,15 +61,22 @@ def init(
 
 @app.command()
 def collect(
-    collectors: list[str] = typer.Option([], "--collector", "-c", help="Specific collectors to run"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Run without storing data"),
+    collectors: Annotated[
+        list[str] | None,
+        typer.Option(None, "--collector", "-c", help="Specific collectors to run"),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option(False, "--dry-run", help="Run without storing data")
+    ] = False,
 ):
     """Run signal collectors."""
     console.print("[bold blue]Running signal collectors...[/]")
-    
+
+    selected_collectors = collectors or []
+
     async def _run():
         runner = PipelineRunner()
-        
+
         all_collectors = [
             ("rss", RSSCollector),
             ("github", GitHubCollector),
@@ -77,30 +85,30 @@ def collect(
             ("discovery", CompanyDiscoveryCollector),
             ("jobs", JobTrackingCollector),
         ]
-        
+
         for name, collector_class in all_collectors:
-            if not collectors or name in collectors:
+            if not selected_collectors or name in selected_collectors:
                 runner.register_collector(collector_class())
-        
+
         results = await runner.run_collection()
-        
+
         if not dry_run:
-            ingest = IngestionService()
+            IngestionService()
             for result in results:
                 if result.status.value in ("success", "partial"):
                     pass
-        
+
         return results
-    
+
     results = asyncio.run(_run())
-    
+
     table = Table(title="Collection Results")
     table.add_column("Collector", style="cyan")
     table.add_column("Status", style="green")
     table.add_column("Signals", style="yellow")
     table.add_column("Duration", style="blue")
     table.add_column("Errors", style="red")
-    
+
     for result in results:
         table.add_row(
             result.collector_name,
@@ -109,35 +117,37 @@ def collect(
             f"{result.duration_seconds:.1f}s",
             str(len(result.errors)),
         )
-    
+
     console.print(table)
 
 
 @app.command()
 def report(
-    type: str = typer.Option("daily", "--type", "-t", help="Report type: daily, discord, obsidian, all"),
-    output: str = typer.Option("./exports", "--output", "-o", help="Output directory"),
+    type: str = typer.Option(
+        "daily", "--type", "-t", help="Report type: daily, discord, obsidian, all"
+    ),
+    _output: str = typer.Option("./exports", "--output", "-o", help="Output directory"),
 ):
     """Generate intelligence reports."""
     console.print(f"[bold blue]Generating {type} report...[/]")
-    
+
     if type in ("daily", "all"):
         reporter = DailyBriefReporter()
         paths = reporter.generate_and_export()
         console.print(f"[green]Daily brief exported: {', '.join(str(p) for p in paths)}[/]")
-    
+
     if type in ("discord", "all"):
         reporter = DiscordReporter()
         brief = reporter.generate_brief()
         console.print(f"[green]Discord brief generated ({len(brief['fields'])} fields)[/]")
-    
+
     if type in ("obsidian", "all"):
         reporter = ObsidianReporter()
         paths = reporter.generate_all_notes()
         console.print(f"[green]Generated {len(paths)} Obsidian notes[/]")
-    
+
     if type == "all":
-        console.print(f"[bold green]All reports generated successfully[/]")
+        console.print("[bold green]All reports generated successfully[/]")
 
 
 @app.command()
@@ -147,7 +157,7 @@ def score(
 ):
     """Score companies by intelligence metrics."""
     engine = ScoringEngine()
-    
+
     if company_id:
         score = engine.score_company(company_id)
         console.print(f"\n[bold]Score for {score.get('company_name')}:[/bold]")
@@ -167,7 +177,7 @@ def score(
         table.add_column("Funding", style="blue")
         table.add_column("Engineering", style="blue")
         table.add_column("Hiring", style="blue")
-        
+
         for i, r in enumerate(results, 1):
             table.add_row(
                 str(i),
@@ -177,7 +187,7 @@ def score(
                 f"{r.get('engineering_velocity', 0):.1f}",
                 f"{r.get('hiring_velocity', 0):.1f}",
             )
-        
+
         console.print(table)
 
 
@@ -190,7 +200,7 @@ def alerts(
 ):
     """Manage alert rules and check for alerts."""
     engine = AlertEngine()
-    
+
     if action == "check":
         alerts = engine.process_unalerted_events()
         if alerts:
@@ -199,12 +209,12 @@ def alerts(
                 console.print(f"  [{alert['channel']}] {alert['message']}")
         else:
             console.print("[green]No new alerts[/green]")
-    
+
     elif action == "create" and name and events:
         event_list = [e.strip() for e in events.split(",")]
         rule = engine.create_rule(name, event_list, channel)
         console.print(f"[green]Alert rule created: {rule.name}[/green]")
-    
+
     elif action == "list":
         console.print("[yellow]Alert listing not yet implemented[/yellow]")
 
@@ -213,18 +223,20 @@ def alerts(
 def status():
     """Show pipeline status."""
     settings = get_settings()
-    
+
     table = Table(title="Competitor Intelligence Status")
     table.add_column("Setting", style="cyan")
     table.add_column("Value", style="green")
-    
+
     table.add_row("Database", str(settings.db.path))
     table.add_row("Log Level", settings.log_level)
     table.add_row("Max Concurrent", str(settings.collector.max_concurrent))
-    table.add_row("Discord Webhook", "Configured" if settings.discord.webhook_url else "Not configured")
+    table.add_row(
+        "Discord Webhook", "Configured" if settings.discord.webhook_url else "Not configured"
+    )
     table.add_row("Ollama Model", settings.ollama.model)
     table.add_row("Collectors", "6 (rss, github, website, sec, discovery, jobs)")
-    
+
     console.print(table)
 
 
@@ -232,22 +244,22 @@ def status():
 def pipeline():
     """Run the full pipeline."""
     console.print("[bold blue]Running full competitor intelligence pipeline...[/]")
-    
+
     async def _run():
         runner = PipelineRunner()
-        
+
         runner.register_collector(RSSCollector())
         runner.register_collector(GitHubCollector())
         runner.register_collector(WebsiteCollector())
         runner.register_collector(SECCollector())
         runner.register_collector(CompanyDiscoveryCollector())
         runner.register_collector(JobTrackingCollector())
-        
-        results = await runner.run_collection()
+
+        await runner.run_collection()
         return runner.get_summary()
-    
+
     summary = asyncio.run(_run())
-    
+
     console.print("\n[bold green]Pipeline Complete[/]")
     for key, value in summary.items():
         console.print(f"  {key}: {value}")

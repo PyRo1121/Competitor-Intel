@@ -23,8 +23,8 @@
 </script>
 
 <button
-  on:click={toggle}
-  class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors"
+  onclick={toggle}
+  class="ci-btn p-2 text-[var(--color-ink-muted)]"
   aria-label="Toggle dark mode"
 >
   {#if isDark}

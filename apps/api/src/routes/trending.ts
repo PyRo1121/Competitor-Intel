@@ -22,7 +22,7 @@ app.get("/", (c) => {
     WHERE c.status = 'active'
     ORDER BY events_30d DESC
     LIMIT 20
-  `
+  `,
     )
     .all(windowExpr, windowExpr);
 
@@ -36,21 +36,25 @@ app.get("/:id", (c) => {
   const company = db.prepare("SELECT name, industry FROM companies WHERE id = ?").get(id);
   if (!company) return c.json({ error: "Company not found" }, 404);
 
-  const events = db.prepare(`
+  const events = db
+    .prepare(`
     SELECT event_type, COUNT(*) as count
     FROM intelligence_events
     WHERE company_id = ? AND created_at >= datetime('now', '-30 days')
     GROUP BY event_type
     ORDER BY count DESC
-  `).all(id);
+  `)
+    .all(id);
 
-  const signals = db.prepare(`
+  const signals = db
+    .prepare(`
     SELECT source, COUNT(*) as count
     FROM raw_signals
     WHERE company_id = ? AND detected_at >= datetime('now', '-30 days')
     GROUP BY source
     ORDER BY count DESC
-  `).all(id);
+  `)
+    .all(id);
 
   return c.json({ company, events, signals });
 });

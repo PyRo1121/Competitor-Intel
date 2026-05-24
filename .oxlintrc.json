@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "import"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "pedantic": "off"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/.svelte-kit/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/*.svelte"
+  ],
+  "rules": {
+    "eslint/no-underscore-dangle": ["warn", { "allow": ["__dirname", "__filename"] }]
+  }
+}

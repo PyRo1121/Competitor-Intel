@@ -9,7 +9,7 @@ app.get("/", zValidator("query", eventQuery), (c) => {
   const db = getDB();
   const { limit, offset, type } = c.req.valid("query");
 
-  let sql = `SELECT ie.*, c.name as company_name
+  let sql = `SELECT ie.*, c.name as company_name, c.slug as company_slug
              FROM intelligence_events ie
              LEFT JOIN companies c ON c.id = ie.company_id
              WHERE 1=1`;
@@ -24,7 +24,9 @@ app.get("/", zValidator("query", eventQuery), (c) => {
   params.push(limit, offset);
 
   const rows = db.prepare(sql).all(...params);
-  const { count } = db.prepare(`SELECT COUNT(*) as count FROM intelligence_events`).get() as { count: number };
+  const { count } = db.prepare(`SELECT COUNT(*) as count FROM intelligence_events`).get() as {
+    count: number;
+  };
 
   return c.json({ events: rows, count, limit, offset });
 });

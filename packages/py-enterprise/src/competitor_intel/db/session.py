@@ -3,7 +3,7 @@
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
 from competitor_intel.settings import get_settings
 
@@ -19,15 +19,22 @@ engine = create_engine(
     },
 )
 
+
 # Configure WAL mode on connection
 @event.listens_for(engine, "connect")
-def set_sqlite_pragma(dbapi_conn, connection_record):
+def set_sqlite_pragma(dbapi_conn, _connection_record):
+    import os
+
+    busy_ms = os.environ.get("CI_SQLITE_BUSY_TIMEOUT_MS", "120000")
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.execute("PRAGMA busy_timeout=30000")
-    cursor.execute("PRAGMA cache_size=-64000")
+    cursor.execute(f"PRAGMA busy_timeout={busy_ms}")
+    cursor.execute("PRAGMA cache_size=-256000")
+    cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute("PRAGMA mmap_size=268435456")
+    cursor.execute("PRAGMA wal_autocheckpoint=10000")
     cursor.close()
 
 
@@ -51,6 +58,6 @@ def get_session():
 def init_db():
     """Initialize database tables."""
     from competitor_intel.db.models import Base
-    
+
     Base.metadata.create_all(bind=engine)
     return engine

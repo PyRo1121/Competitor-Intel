@@ -9,9 +9,10 @@ import logging
 import sqlite3
 import sys
 
+from ci_paths import db_path, ensure_app_paths
+
 from embeddings import cosine_similarity, get_embedding
 from investor_tiers import get_investor_tier
-from ci_paths import db_path, ensure_app_paths
 
 ensure_app_paths()
 
@@ -62,8 +63,8 @@ def semantic_search(query: str, top_k: int = 10):
     for i, (score, r, tier) in enumerate(results, 1):
         amt = f"${r['amount_usd']:,}" if r.get("amount_usd") else "Undisclosed"
         tag = " [TIER 1]" if tier == 1 else (" [Tier 2]" if tier == 2 else "")
-        logger.info("%s. [%.3f] %s — %s%s", i, score, r.get('event_type'), amt, tag)
-        logger.info("   %s • %s", r.get('source'), r.get('announced_date') or 'recent')
+        logger.info("%s. [%.3f] %s — %s%s", i, score, r.get("event_type"), amt, tag)
+        logger.info("   %s • %s", r.get("source"), r.get("announced_date") or "recent")
 
     return results
 

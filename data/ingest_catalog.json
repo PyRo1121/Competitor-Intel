@@ -1,0 +1,9 @@
+{
+  "generated": "2026-05-19",
+  "source": "collectors.sources_registry.catalog_summary + x/youtube constants",
+  "rssFeedsEnabled": 150,
+  "rssFeedsTotal": 191,
+  "rssFeedsDisabled": 41,
+  "xMonitorQueries": 10,
+  "youtubeChannels": 10
+}

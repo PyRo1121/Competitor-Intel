@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-import logging
-import sqlite3
-import json
 import hashlib
-from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+import json
+import logging
+from datetime import UTC, datetime
+from typing import Any
 
 from db.connection import get_conn
+
 from collectors.enrichment.utils import safe_request
 
 logger = logging.getLogger("website_monitor")
 
 
-def fetch_homepage(url: str) -> Optional[Dict[str, Any]]:
+def fetch_homepage(url: str) -> dict[str, Any] | None:
     if not url:
         return None
     try:
         if not url.startswith("http"):
             url = "https://" + url
-        resp = safe_request(url, timeout=15, allow_redirects=True)
+        resp = safe_request(url, timeout=15)
         if not resp:
             return None
         text = resp.text
@@ -36,7 +36,7 @@ def fetch_homepage(url: str) -> Optional[Dict[str, Any]]:
                 quote = text[content_pos + 8]
                 end = text.find(quote, content_pos + 9)
                 if end > content_pos:
-                    meta_desc = text[content_pos + 9:end].strip()[:500]
+                    meta_desc = text[content_pos + 9 : end].strip()[:500]
         page_hash = hashlib.sha256(text.encode()).hexdigest()[:32]
         return {
             "url": url,
@@ -50,7 +50,7 @@ def fetch_homepage(url: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def detect_changes(company_id: int, snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def detect_changes(company_id: int, snapshot: dict[str, Any]) -> dict[str, Any] | None:
     conn = get_conn()
     cursor = conn.cursor()
     cursor.execute(
@@ -75,7 +75,9 @@ def detect_changes(company_id: int, snapshot: Dict[str, Any]) -> Optional[Dict[s
     return changes if changes else None
 
 
-def store_snapshot(company_id: int, snapshot: Dict[str, Any], changes: Optional[Dict[str, Any]] = None):
+def store_snapshot(
+    company_id: int, snapshot: dict[str, Any], changes: dict[str, Any] | None = None
+):
     conn = get_conn()
     cursor = conn.cursor()
     cursor.execute(
@@ -91,7 +93,7 @@ def store_snapshot(company_id: int, snapshot: Dict[str, Any], changes: Optional[
             snapshot["meta_description"],
             snapshot["hash"],
             json.dumps(changes) if changes else None,
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(UTC).isoformat(),
         ),
     )
     conn.commit()

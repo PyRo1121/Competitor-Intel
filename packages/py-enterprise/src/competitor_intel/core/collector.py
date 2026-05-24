@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 import structlog
@@ -23,7 +23,7 @@ logger = structlog.get_logger()
 
 class BaseCollector(ABC):
     """Base class for all signal collectors.
-    
+
     Provides:
     - Async HTTP client with timeouts
     - Rate limiting via pyrate-limiter
@@ -31,29 +31,29 @@ class BaseCollector(ABC):
     - Structured logging
     - Metrics collection
     """
-    
+
     def __init__(self, name: str):
         self.name = name
         self.settings = get_settings()
         self.metrics = CollectorMetrics()
-        self._client: Optional[httpx.AsyncClient] = None
-        self._semaphore: Optional[asyncio.Semaphore] = None
-    
+        self._client: httpx.AsyncClient | None = None
+        self._semaphore: asyncio.Semaphore | None = None
+
     @property
     def source_type(self) -> str:
         """Return the source type string. Override in subclasses."""
         return "unknown"
-    
+
     @property
     def timeout(self) -> int:
         """Request timeout in seconds."""
         return self.settings.rate_limit.default_timeout
-    
+
     @property
     def max_concurrent(self) -> int:
         """Maximum concurrent requests."""
         return self.settings.collector.max_concurrent
-    
+
     async def __aenter__(self):
         """Async context manager entry."""
         self._client = httpx.AsyncClient(
@@ -63,13 +63,13 @@ class BaseCollector(ABC):
         )
         self._semaphore = asyncio.Semaphore(self.max_concurrent)
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         if self._client:
             await self._client.aclose()
             self._client = None
-    
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -81,21 +81,21 @@ class BaseCollector(ABC):
             raise RuntimeError("Collector not initialized. Use 'async with' context.")
         if not self._semaphore:
             raise RuntimeError("Collector not initialized. Use 'async with' context.")
-        
+
         self.metrics.total_requests += 1
         start = time.time()
-        
+
         try:
             async with self._semaphore:
                 response = await self._client.get(url, **kwargs)
                 response.raise_for_status()
-                
+
                 self.metrics.successful_requests += 1
                 self.metrics.total_bytes_downloaded += len(response.content)
-                
+
                 duration_ms = (time.time() - start) * 1000
                 self._update_avg_response_time(duration_ms)
-                
+
                 logger.debug(
                     "fetch_success",
                     url=url,
@@ -103,7 +103,7 @@ class BaseCollector(ABC):
                     duration_ms=duration_ms,
                 )
                 return response
-                
+
         except httpx.HTTPStatusError as e:
             self.metrics.failed_requests += 1
             if e.response.status_code == 429:
@@ -119,18 +119,18 @@ class BaseCollector(ABC):
             self.metrics.failed_requests += 1
             logger.error("fetch_error", url=url, error=str(e))
             raise
-    
+
     async def run(self) -> CollectorResult:
         """Main entry point. Collect signals and return result."""
         start_time = time.time()
         errors = []
         signals = []
-        
+
         try:
             async with self:
                 logger.info("collector_started", collector=self.name)
                 signals = await self.collect()
-                
+
         except NotImplementedError:
             logger.warning("collector_not_implemented", collector=self.name)
             return CollectorResult(
@@ -141,9 +141,9 @@ class BaseCollector(ABC):
         except Exception as e:
             logger.error("collector_failed", collector=self.name, error=str(e))
             errors.append(str(e))
-        
+
         duration = time.time() - start_time
-        
+
         result = CollectorResult(
             collector_name=self.name,
             status=CollectorStatus.SUCCESS if not errors else CollectorStatus.PARTIAL,
@@ -159,7 +159,7 @@ class BaseCollector(ABC):
                 "rate_limit_hits": self.metrics.rate_limit_hits,
             },
         )
-        
+
         logger.info(
             "collector_completed",
             collector=self.name,
@@ -167,17 +167,17 @@ class BaseCollector(ABC):
             duration=duration,
             status=result.status.value,
         )
-        
+
         return result
-    
+
     @abstractmethod
     async def collect(self) -> list[dict[str, Any]]:
         """Collect signals. Must be implemented by subclasses.
-        
+
         Returns:
             List of signal dictionaries with keys:
             - title: str
-            - summary: str  
+            - summary: str
             - url: str
             - source: str
             - signal_type: str
@@ -186,17 +186,15 @@ class BaseCollector(ABC):
             - metadata: dict (optional)
         """
         raise NotImplementedError
-    
+
     @staticmethod
     def generate_hash(data: dict[str, Any]) -> str:
         """Generate semantic hash for deduplication."""
         content = str(sorted(data.items()))
         return hashlib.sha256(content.encode()).hexdigest()[:32]
-    
+
     def _update_avg_response_time(self, new_time_ms: float):
         """Update rolling average response time."""
         n = self.metrics.total_requests
         old_avg = self.metrics.avg_response_time_ms
-        self.metrics.avg_response_time_ms = (
-            (old_avg * (n - 1) + new_time_ms) / n
-        )
+        self.metrics.avg_response_time_ms = (old_avg * (n - 1) + new_time_ms) / n

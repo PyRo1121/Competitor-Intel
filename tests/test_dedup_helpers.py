@@ -9,7 +9,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from db import connection as db_connection
-from db.ingest import get_company_id, insert_raw_signal_dedup, raw_signal_exists, url_dedup_key
+from db.ingest import (
+    canonical_url_for_dedup,
+    get_company_id,
+    insert_raw_signal_dedup,
+    raw_signal_exists,
+    url_dedup_key,
+)
 
 
 class DedupHelperTests(unittest.TestCase):
@@ -45,7 +51,17 @@ class DedupHelperTests(unittest.TestCase):
     def test_url_dedup_key_is_stable(self):
         url = "https://example.com/article"
         self.assertEqual(url_dedup_key(url), url_dedup_key(url))
-        self.assertNotEqual(url_dedup_key(url), url_dedup_key(url + "/"))
+        # Trailing slash is normalized away for dedup (6-A06).
+        self.assertEqual(url_dedup_key(url), url_dedup_key(url + "/"))
+        self.assertNotEqual(url_dedup_key(url), url_dedup_key(url + "/other"))
+
+    def test_url_dedup_key_ignores_fragment(self):
+        base = "https://example.com/article"
+        self.assertEqual(url_dedup_key(f"{base}#rs1"), url_dedup_key(f"{base}#rs99"))
+        self.assertEqual(
+            canonical_url_for_dedup(f"{base}#rs1"),
+            canonical_url_for_dedup(base),
+        )
 
     def test_insert_raw_signal_dedup(self):
         cursor = self.conn.cursor()
@@ -90,7 +106,8 @@ class DedupHelperTests(unittest.TestCase):
             """
         )
         self.conn.execute(
-            "INSERT INTO companies (id, name, slug, x_handle) VALUES (1, 'Anthropic', 'anthropic', NULL)"
+            "INSERT INTO companies (id, name, slug, x_handle) "
+            "VALUES (1, 'Anthropic', 'anthropic', NULL)"
         )
         self.conn.commit()
         self.assertEqual(get_company_id("anthropic"), 1)

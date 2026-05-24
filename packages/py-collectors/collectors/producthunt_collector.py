@@ -2,8 +2,8 @@
 """Product Hunt collector - monitors product launches via RSS."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 from xml.etree import ElementTree as ET
 
 from db.connection import get_conn
@@ -15,7 +15,7 @@ logger = logging.getLogger("producthunt")
 FEED_URL = "https://www.producthunt.com/feed"
 
 
-def fetch_feed() -> List[Dict[str, Any]]:
+def fetch_feed() -> list[dict[str, Any]]:
     body = fetch_text(FEED_URL, timeout=20.0)
     if not body:
         return []
@@ -46,16 +46,44 @@ def fetch_feed() -> List[Dict[str, Any]]:
         return []
 
 
-def extract_company_names(title: str, description: str) -> List[str]:
+def extract_company_names(title: str, description: str) -> list[str]:
     text = f"{title} {description}"
     keywords = [
-        "Cursor", "Perplexity", "Cognition", "Harvey", "ElevenLabs",
-        "Runway", "Linear", "Notion", "Arc", "Coda", "Height",
-        "Mem", "Limitless", "Rewind", "Adept", "Anthropic",
-        "OpenAI", "Midjourney", "Stability AI", "Cohere", "Replicate",
-        "Hugging Face", "LangChain", "Pinecone", "Weaviate", "Chroma",
-        "LlamaIndex", "Vercel", "Supabase", "Stripe", "Figma",
-        "Airtable", "Zapier", "Make", "Webflow",
+        "Cursor",
+        "Perplexity",
+        "Cognition",
+        "Harvey",
+        "ElevenLabs",
+        "Runway",
+        "Linear",
+        "Notion",
+        "Arc",
+        "Coda",
+        "Height",
+        "Mem",
+        "Limitless",
+        "Rewind",
+        "Adept",
+        "Anthropic",
+        "OpenAI",
+        "Midjourney",
+        "Stability AI",
+        "Cohere",
+        "Replicate",
+        "Hugging Face",
+        "LangChain",
+        "Pinecone",
+        "Weaviate",
+        "Chroma",
+        "LlamaIndex",
+        "Vercel",
+        "Supabase",
+        "Stripe",
+        "Figma",
+        "Airtable",
+        "Zapier",
+        "Make",
+        "Webflow",
     ]
     return list({kw for kw in keywords if kw.lower() in text.lower()})
 
@@ -75,11 +103,11 @@ def classify_launch_type(title: str, description: str) -> str:
     return "product_launch"
 
 
-def store_signals(items: List[Dict[str, Any]]) -> int:
+def store_signals(items: list[dict[str, Any]]) -> int:
     conn = get_conn()
     cursor = conn.cursor()
     stored = 0
-    detected_at = datetime.now(timezone.utc).isoformat()
+    detected_at = datetime.now(UTC).isoformat()
 
     for item in items:
         url = item.get("url") or ""

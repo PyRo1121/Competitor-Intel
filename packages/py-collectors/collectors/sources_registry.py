@@ -13,10 +13,9 @@ re-check via utils.http.fetch_text or HEAD.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
 # Canonical category slugs for private-company intel
-FEED_CATEGORIES: Tuple[str, ...] = (
+FEED_CATEGORIES: tuple[str, ...] = (
     "vc",
     "pe",
     "tech_press",
@@ -25,12 +24,13 @@ FEED_CATEGORIES: Tuple[str, ...] = (
     "ai_lab",
     "company_blog",
     "regulatory",
+    "press_wire",
     "eu_startup",
     "general_startup",
 )
 
 # Backward compatibility for collectors/docs that used legacy slugs
-CATEGORY_ALIASES: Dict[str, str] = {
+CATEGORY_ALIASES: dict[str, str] = {
     "news": "tech_press",
     "funding": "general_startup",
     "ai": "ai_lab",
@@ -48,27 +48,52 @@ class FeedSource:
     category: str
     trust_tier: int = 2
     enabled: bool = True
-    disabled_reason: Optional[str] = None
+    disabled_reason: str | None = None
 
-    def as_rss_dict(self) -> Dict[str, str]:
+    def as_rss_dict(self) -> dict[str, str]:
         return {"name": self.name, "url": self.url, "category": self.category}
 
 
 # fmt: off
-FEED_CATALOG: Tuple[FeedSource, ...] = (
+FEED_CATALOG: tuple[FeedSource, ...] = (
     # --- tech_press (verified 2026-05) ---
     FeedSource("TechCrunch", "https://techcrunch.com/feed/", "tech_press", 1),
-    FeedSource("TechCrunch AI", "https://techcrunch.com/category/artificial-intelligence/feed/", "tech_press", 1),
-    FeedSource("TechCrunch Startups", "https://techcrunch.com/category/startups/feed/", "tech_press", 1),
-    FeedSource("TechCrunch Venture", "https://techcrunch.com/category/venture/feed/", "tech_press", 1),
+    FeedSource(
+        'TechCrunch AI',
+        'https://techcrunch.com/category/artificial-intelligence/feed/',
+        'tech_press',
+        1,
+    ),
+    FeedSource(
+        'TechCrunch Startups',
+        'https://techcrunch.com/category/startups/feed/',
+        'tech_press',
+        1,
+    ),
+    FeedSource(
+        'TechCrunch Venture',
+        'https://techcrunch.com/category/venture/feed/',
+        'tech_press',
+        1,
+    ),
     FeedSource("VentureBeat", "https://venturebeat.com/feed/", "tech_press", 1),
     FeedSource("VentureBeat AI", "https://venturebeat.com/category/ai/feed/", "tech_press", 1),
     FeedSource("Ars Technica", "http://feeds.arstechnica.com/arstechnica/index", "tech_press", 2),
     FeedSource("The Verge", "https://www.theverge.com/rss/index.xml", "tech_press", 2),
     FeedSource("Wired", "https://www.wired.com/feed/rss", "tech_press", 2),
-    FeedSource("Wired Business", "https://www.wired.com/feed/category/business/latest/rss", "tech_press", 1),
+    FeedSource(
+        'Wired Business',
+        'https://www.wired.com/feed/category/business/latest/rss',
+        'tech_press',
+        1,
+    ),
     FeedSource("MIT Technology Review", "https://www.technologyreview.com/feed/", "tech_press", 2),
-    FeedSource("Bloomberg Technology", "https://feeds.bloomberg.com/technology/news.rss", "tech_press", 1),
+    FeedSource(
+        'Bloomberg Technology',
+        'https://feeds.bloomberg.com/technology/news.rss',
+        'tech_press',
+        1,
+    ),
     FeedSource("Fast Company", "https://www.fastcompany.com/latest/rss", "tech_press", 2),
     FeedSource("ZDNet", "https://www.zdnet.com/news/rss.xml", "tech_press", 2),
     FeedSource("CNET News", "https://www.cnet.com/rss/news/", "tech_press", 2),
@@ -132,7 +157,12 @@ FEED_CATALOG: Tuple[FeedSource, ...] = (
     FeedSource("Crunchbase News", "https://news.crunchbase.com/feed/", "general_startup", 1),
     FeedSource("TechFundingNews", "https://techfundingnews.com/feed/", "general_startup", 2),
     FeedSource("StrictlyVC", "https://strictlyvc.com/feed/", "general_startup", 1),
-    FeedSource("Fortune Term Sheet", "https://fortune.com/feed/tag/term-sheet/rss/", "general_startup", 1),
+    FeedSource(
+        'Fortune Term Sheet',
+        'https://fortune.com/feed/tag/term-sheet/rss/',
+        'general_startup',
+        1,
+    ),
     FeedSource("Inc Magazine", "https://www.inc.com/rss/", "general_startup", 2),
     FeedSource("Entrepreneur", "https://www.entrepreneur.com/latest.rss", "general_startup", 2),
     FeedSource("SaaStr", "https://www.saastr.com/feed/", "general_startup", 2),
@@ -141,6 +171,15 @@ FEED_CATALOG: Tuple[FeedSource, ...] = (
     FeedSource("HN Show", "https://hnrss.org/show", "general_startup", 2),
     FeedSource("HN High Signal", "https://hnrss.org/newest?points=50", "general_startup", 2),
     FeedSource("Product Hunt", "https://www.producthunt.com/feed", "general_startup", 1),
+    FeedSource(
+        'CB Insights Research',
+        'https://www.cbinsights.com/research/feed/',
+        'general_startup',
+        1,
+    ),
+    FeedSource("AngelList Blog", "https://www.angellist.com/blog/rss.xml", "general_startup", 1),
+    FeedSource("Pulse2", "https://pulse2.com/feed/", "general_startup", 2),
+    FeedSource("Startup Daily", "https://www.startupdaily.net/feed/", "general_startup", 2),
     FeedSource(
         "PitchBook News",
         "https://pitchbook.com/news/feed",
@@ -409,7 +448,12 @@ FEED_CATALOG: Tuple[FeedSource, ...] = (
     # --- pe ---
     FeedSource("PE Hub", "https://www.pehub.com/feed/", "pe", 1),
     FeedSource("Buyouts Insider", "https://www.buyoutsinsider.com/feed/", "pe", 1),
-    FeedSource("Private Equity International", "https://www.privateequityinternational.com/feed/", "pe", 1),
+    FeedSource(
+        'Private Equity International',
+        'https://www.privateequityinternational.com/feed/',
+        'pe',
+        1,
+    ),
     FeedSource("Private Equity Wire", "https://www.privateequitywire.co.uk/rss", "pe", 2),
     FeedSource("Secondaries Investor", "https://www.secondariesinvestor.com/feed/", "pe", 2),
     FeedSource("Fortune Deals", "https://fortune.com/feed/tag/deals/rss/", "pe", 2),
@@ -506,7 +550,12 @@ FEED_CATALOG: Tuple[FeedSource, ...] = (
     FeedSource("Slack Engineering", "https://slack.engineering/feed/", "company_blog", 2),
     FeedSource("Discord Blog", "https://discord.com/blog/rss.xml", "company_blog", 2),
     FeedSource("Palantir Blog", "https://blog.palantir.com/feed", "company_blog", 2),
-    FeedSource("Square Developer Blog", "https://developer.squareup.com/blog/rss.xml", "company_blog", 2),
+    FeedSource(
+        'Square Developer Blog',
+        'https://developer.squareup.com/blog/rss.xml',
+        'company_blog',
+        2,
+    ),
     FeedSource("Linear Blog", "https://linear.app/rss/blog.xml", "company_blog", 2),
     FeedSource("Supabase Blog", "https://supabase.com/rss.xml", "company_blog", 2),
     FeedSource(
@@ -549,14 +598,48 @@ FEED_CATALOG: Tuple[FeedSource, ...] = (
         enabled=False,
         disabled_reason="404 as of 2026-05",
     ),
+    # --- press_wire (verified 2026-05) ---
+    FeedSource(
+        "PR Newswire",
+        "https://www.prnewswire.com/rss/news-releases-list.rss",
+        "press_wire",
+        1,
+    ),
+    FeedSource(
+        "GlobeNewswire Technology",
+        "https://www.globenewswire.com/RssFeed/subjectcode/4-Technology/feedTitle/GlobeNewswire%20-%20Technology",
+        "press_wire",
+        1,
+    ),
+    FeedSource(
+        "Business Wire",
+        "https://feed.businesswire.com/rss/home/?rss=G1QFDERJXkJeGVtQWA==",
+        "press_wire",
+        1,
+    ),
     # --- regulatory ---
-    FeedSource("EU Digital Strategy", "https://digital-strategy.ec.europa.eu/en/rss.xml", "regulatory", 2),
+    FeedSource(
+        'EU Digital Strategy',
+        'https://digital-strategy.ec.europa.eu/en/rss.xml',
+        'regulatory',
+        2,
+    ),
     FeedSource("FCA News", "https://www.fca.org.uk/news/rss.xml", "regulatory", 1),
-    FeedSource("CFPB Newsroom", "https://www.consumerfinance.gov/about-us/newsroom/feed/", "regulatory", 1),
+    FeedSource(
+        'CFPB Newsroom',
+        'https://www.consumerfinance.gov/about-us/newsroom/feed/',
+        'regulatory',
+        1,
+    ),
     FeedSource("ECB Press", "https://www.ecb.europa.eu/rss/press.html", "regulatory", 1),
     FeedSource("EBA News", "https://www.eba.europa.eu/news-press/news/rss.xml", "regulatory", 1),
     FeedSource("Bank of England News", "https://www.bankofengland.co.uk/rss/news", "regulatory", 1),
-    FeedSource("Federal Reserve Press", "https://www.federalreserve.gov/feeds/press_all.xml", "regulatory", 1),
+    FeedSource(
+        'Federal Reserve Press',
+        'https://www.federalreserve.gov/feeds/press_all.xml',
+        'regulatory',
+        1,
+    ),
     FeedSource(
         "SEC Current Filings",
         "https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&count=40&output=atom",
@@ -590,17 +673,17 @@ FEED_CATALOG: Tuple[FeedSource, ...] = (
 )
 # fmt: on
 
-X_MONITOR_QUERIES: Tuple[str, ...] = (
-    '(\"raised seed\" OR \"raised $\" OR \"Series A\") (startup OR SaaS OR fintech) min_faves:5',
-    '(\"just launched\" OR \"new startup\" OR \"stealth mode\") min_faves:10',
-    '(neobank OR \"digital bank\" OR \"embedded finance\") (funding OR raised OR launch)',
-    '(\"PE firm\" OR \"private equity\" OR buyout) (acquires OR acquisition) min_faves:5',
-    '(\"founder of\" OR \"co-founder\") (startup OR fintech) since:2025-01-01',
-    '(\"new AI startup\" OR \"AI company\") (seed OR pre-seed) min_faves:5',
-    'OpenAI OR Anthropic OR Stripe OR Plaid (funding OR partnership OR launch) min_faves:20',
-    '(acquires OR acquisition) (SaaS OR fintech OR AI) min_faves:10',
-    'YC W25 OR YC S25 (launch OR funding) min_faves:5',
-    '(Revolut OR Monzo OR N26 OR Chime OR Wise) (funding OR expansion OR launch)',
+X_MONITOR_QUERIES: tuple[str, ...] = (
+    '("raised seed" OR "raised $" OR "Series A") (startup OR SaaS OR fintech) min_faves:5',
+    '("just launched" OR "new startup" OR "stealth mode") min_faves:10',
+    '(neobank OR "digital bank" OR "embedded finance") (funding OR raised OR launch)',
+    '("PE firm" OR "private equity" OR buyout) (acquires OR acquisition) min_faves:5',
+    '("founder of" OR "co-founder") (startup OR fintech) since:2025-01-01',
+    '("new AI startup" OR "AI company") (seed OR pre-seed) min_faves:5',
+    "OpenAI OR Anthropic OR Stripe OR Plaid (funding OR partnership OR launch) min_faves:20",
+    "(acquires OR acquisition) (SaaS OR fintech OR AI) min_faves:10",
+    "YC W25 OR YC S25 (launch OR funding) min_faves:5",
+    "(Revolut OR Monzo OR N26 OR Chime OR Wise) (funding OR expansion OR launch)",
 )
 
 SEC_USER_AGENT = "Hermes Competitor Intel contact@pyro1121.dev"
@@ -610,31 +693,31 @@ def _resolve_category(category: str) -> str:
     return CATEGORY_ALIASES.get(category, category)
 
 
-def enabled_feeds() -> List[FeedSource]:
+def enabled_feeds() -> list[FeedSource]:
     return [f for f in FEED_CATALOG if f.enabled]
 
 
-def disabled_feeds() -> List[FeedSource]:
+def disabled_feeds() -> list[FeedSource]:
     return [f for f in FEED_CATALOG if not f.enabled]
 
 
-def rss_feed_dicts() -> List[Dict[str, str]]:
+def rss_feed_dicts() -> list[dict[str, str]]:
     return [f.as_rss_dict() for f in enabled_feeds()]
 
 
-def multi_source_tuples() -> List[Tuple[str, str]]:
+def multi_source_tuples() -> list[tuple[str, str]]:
     return [(f.url, f.name) for f in enabled_feeds()]
 
 
-def feeds_by_category(category: str) -> List[FeedSource]:
+def feeds_by_category(category: str) -> list[FeedSource]:
     resolved = _resolve_category(category)
     return [f for f in enabled_feeds() if f.category == resolved]
 
 
-def catalog_summary() -> Dict[str, int]:
+def catalog_summary() -> dict[str, int | dict[str, int]]:
     enabled = enabled_feeds()
     disabled = disabled_feeds()
-    by_cat: Dict[str, int] = {}
+    by_cat: dict[str, int] = {}
     for f in enabled:
         by_cat[f.category] = by_cat.get(f.category, 0) + 1
     return {
@@ -645,5 +728,5 @@ def catalog_summary() -> Dict[str, int]:
     }
 
 
-def get_x_monitor_queries() -> List[str]:
+def get_x_monitor_queries() -> list[str]:
     return list(X_MONITOR_QUERIES)

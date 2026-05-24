@@ -8,7 +8,6 @@ Distinct from github_signals.py (trending repos → raw_signals).
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Optional
 
 from db.connection import get_conn
 from utils.http import close_http_client, get_http_client
@@ -45,7 +44,7 @@ def create_github_history_table():
     conn.close()
 
 
-def extract_github_org(website: str, x_handle: Optional[str] = None) -> Optional[str]:
+def extract_github_org(website: str, _x_handle: str | None = None) -> str | None:
     """Extract GitHub organization name from URL."""
     if not website:
         return None
@@ -70,7 +69,7 @@ def extract_github_org(website: str, x_handle: Optional[str] = None) -> Optional
     return None
 
 
-def get_github_data(org: str) -> Dict:
+def get_github_data(org: str) -> dict:
     """Fetch GitHub data for an organization or user."""
     client = get_http_client()
     headers = github_headers()
@@ -102,35 +101,41 @@ def get_github_data(org: str) -> Dict:
     return {"error": f"No repos found for {org}"}
 
 
-def record_github_snapshot(company_id: int, data: Dict):
+def record_github_snapshot(company_id: int, data: dict):
     """Record a GitHub snapshot for a company."""
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         INSERT OR REPLACE INTO github_history
         (company_id, stars, forks, repos, recorded_at)
         VALUES (?, ?, ?, ?, ?)
-    """, (
-        company_id,
-        data.get("stars", 0),
-        data.get("forks", 0),
-        data.get("repos", 0),
-        datetime.now().isoformat(),
-    ))
+    """,
+        (
+            company_id,
+            data.get("stars", 0),
+            data.get("forks", 0),
+            data.get("repos", 0),
+            datetime.now().isoformat(),
+        ),
+    )
     conn.commit()
     conn.close()
 
 
-def calculate_star_velocity(company_id: int) -> Dict:
+def calculate_star_velocity(company_id: int) -> dict:
     """Calculate star growth over last 7 and 30 days."""
     conn = get_conn()
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT stars, recorded_at FROM github_history
         WHERE company_id = ?
         ORDER BY recorded_at DESC
-    """, (company_id,))
+    """,
+        (company_id,),
+    )
 
     records = cursor.fetchall()
     conn.close()
@@ -171,12 +176,15 @@ def run_github_collection(limit: int = 40) -> int:
 
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT id, name, website, github_org FROM companies
         WHERE (github_org IS NOT NULL AND github_org != '')
            OR website IS NOT NULL
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
 
     companies = cursor.fetchall()
     conn.close()
@@ -195,17 +203,20 @@ def run_github_collection(limit: int = 40) -> int:
 
             conn = get_conn()
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE companies
                 SET github_stars = ?, github_forks = ?, github_repos = ?, last_github_update = ?
                 WHERE id = ?
-            """, (
-                data["stars"],
-                data["forks"],
-                data["repos"],
-                datetime.now().isoformat(),
-                company_id,
-            ))
+            """,
+                (
+                    data["stars"],
+                    data["forks"],
+                    data["repos"],
+                    datetime.now().isoformat(),
+                    company_id,
+                ),
+            )
             conn.commit()
             conn.close()
 

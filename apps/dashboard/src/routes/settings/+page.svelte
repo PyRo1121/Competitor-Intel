@@ -1,9 +1,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getStatus } from "$lib/api";
+  import { getStatus, getApiBaseUrl, getAlertRules } from "$lib/api";
+  import { buildIngestHealth, levelTone } from "$lib/freshness";
+  import type { StatusResponse } from "$lib/types/status";
+  import PageHeader from "$lib/components/PageHeader.svelte";
   import { Activity, Database, Bell } from "lucide-svelte";
 
-  let status: any = $state(null);
+  let status = $state<StatusResponse | null>(null);
+  let alertRules = $state<Record<string, unknown>[]>([]);
+  let alertsError = $state<string | null>(null);
+
+  const health = $derived(status ? buildIngestHealth(status, true) : null);
+  const overallTone = $derived(health ? levelTone(health.overall) : levelTone("unknown"));
 
   onMount(async () => {
     try {
@@ -11,63 +19,108 @@
     } catch (e) {
       console.error(e);
     }
+    try {
+      const res = await getAlertRules();
+      alertRules = res.rules ?? [];
+    } catch (e) {
+      alertsError = e instanceof Error ? e.message : "Failed to load alert rules";
+    }
   });
 </script>
 
-<div class="p-8 max-w-3xl mx-auto">
-  <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-8">Settings</h1>
+<div class="ci-page max-w-3xl">
+  <PageHeader title="Settings" subtitle="API connectivity, ingest catalog, and alert rules." />
 
   <div class="space-y-6">
-    <div class="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="ci-panel p-6">
       <div class="flex items-center gap-3 mb-4">
-        <Activity size={20} class="text-slate-500" />
-        <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">API Status</h2>
+        <Activity size={20} class="text-[var(--color-ink-muted)]" />
+        <h2 class="text-sm font-semibold text-[var(--color-ink)]">API Status</h2>
       </div>
       {#if status}
-        <div class="flex items-center gap-2">
-          <div class="h-2.5 w-2.5 rounded-full bg-emerald-500"></div>
-          <span class="text-sm text-slate-600 dark:text-slate-300">Connected</span>
-          <span class="text-xs text-slate-400 dark:text-slate-500">{status.counts.companies} companies tracked</span>
+        <div class="space-y-2">
+          <div class="flex items-center gap-2">
+            <div class="h-2.5 w-2.5 rounded-full bg-[var(--color-healthy)]" aria-hidden="true"></div>
+            <span class="text-sm text-[var(--color-ink-muted)]">Connected</span>
+            <span class="ci-mono text-xs text-[var(--color-ink-faint)]">{getApiBaseUrl()}</span>
+          </div>
+          {#if health}
+            <p class="text-xs text-[var(--color-ink-muted)]">
+              Ingest <span class="font-medium {overallTone.text}">{overallTone.label.toLowerCase()}</span>
+              · {status.counts.companies} companies tracked
+            </p>
+          {/if}
         </div>
       {:else}
         <div class="flex items-center gap-2">
-          <div class="h-2.5 w-2.5 rounded-full bg-red-500"></div>
-          <span class="text-sm text-slate-600 dark:text-slate-300">Disconnected</span>
+          <div class="h-2.5 w-2.5 rounded-full bg-[var(--color-stale)]"></div>
+          <span class="text-sm text-[var(--color-ink-muted)]">Disconnected</span>
         </div>
       {/if}
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="ci-panel p-6">
       <div class="flex items-center gap-3 mb-4">
-        <Database size={20} class="text-slate-500" />
-        <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Data Sources</h2>
+        <Database size={20} class="text-[var(--color-ink-muted)]" />
+        <h2 class="text-sm font-semibold text-[var(--color-ink)]">Data Sources</h2>
       </div>
-      <div class="space-y-2 text-sm">
-        <div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">RSS Feeds</span><span class="text-slate-900 dark:text-slate-100">87</span></div>
-        <div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">X/Twitter Queries</span><span class="text-slate-900 dark:text-slate-100">43</span></div>
-        <div class="flex justify-between"><span class="text-slate-600 dark:text-slate-300">YouTube Channels</span><span class="text-slate-900 dark:text-slate-100">10</span></div>
-      </div>
+      {#if status?.ingestCatalog}
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between gap-4">
+            <span class="text-[var(--color-ink-muted)]">RSS feeds (enabled)</span>
+            <span class="text-[var(--color-ink)] tabular-nums">{status.ingestCatalog.rssFeedsEnabled}</span>
+          </div>
+          <div class="flex justify-between gap-4">
+            <span class="text-[var(--color-ink-muted)]">RSS catalog (total)</span>
+            <span class="text-[var(--color-ink)] tabular-nums">{status.ingestCatalog.rssFeedsTotal}</span>
+          </div>
+          <div class="flex justify-between gap-4">
+            <span class="text-[var(--color-ink-muted)]">X monitor queries</span>
+            <span class="text-[var(--color-ink)] tabular-nums">{status.ingestCatalog.xMonitorQueries}</span>
+          </div>
+          <div class="flex justify-between gap-4">
+            <span class="text-[var(--color-ink-muted)]">YouTube channels</span>
+            <span class="text-[var(--color-ink)] tabular-nums">{status.ingestCatalog.youtubeChannels}</span>
+          </div>
+          <p class="text-xs text-[var(--color-ink-faint)] pt-1">
+            Catalog as of {status.ingestCatalog.generated}. Corpus: {status.counts.signals} signals, {status.counts.events} events.
+          </p>
+        </div>
+      {:else if status}
+        <p class="text-sm text-[var(--color-ink-muted)]">
+          Ingest catalog unavailable. Corpus: {status.counts.signals} signals, {status.counts.events} events.
+        </p>
+      {:else}
+        <p class="text-sm text-[var(--color-ink-muted)]">Connect to API to load source catalog.</p>
+      {/if}
     </div>
 
-    <div class="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div class="ci-panel p-6">
       <div class="flex items-center gap-3 mb-4">
-        <Bell size={20} class="text-slate-500" />
-        <h2 class="text-sm font-semibold text-slate-900 dark:text-slate-100">Notifications</h2>
+        <Bell size={20} class="text-[var(--color-ink-muted)]" />
+        <h2 class="text-sm font-semibold text-[var(--color-ink)]">Alert rules</h2>
       </div>
-      <div class="space-y-3">
-        <label class="flex items-center justify-between cursor-pointer">
-          <span class="text-sm text-slate-600 dark:text-slate-300">Funding alerts</span>
-          <input type="checkbox" checked class="rounded border-slate-300 text-amber-500 focus:ring-amber-500" />
-        </label>
-        <label class="flex items-center justify-between cursor-pointer">
-          <span class="text-sm text-slate-600 dark:text-slate-300">Product launches</span>
-          <input type="checkbox" checked class="rounded border-slate-300 text-amber-500 focus:ring-amber-500" />
-        </label>
-        <label class="flex items-center justify-between cursor-pointer">
-          <span class="text-sm text-slate-600 dark:text-slate-300">Acquisitions</span>
-          <input type="checkbox" checked class="rounded border-slate-300 text-amber-500 focus:ring-amber-500" />
-        </label>
-      </div>
+      {#if alertsError}
+        <div class="ci-alert-error" role="alert">{alertsError}</div>
+      {:else if alertRules.length === 0}
+        <p class="text-sm text-[var(--color-ink-muted)]">
+          No alert rules yet. Create rules via <code class="ci-mono text-xs">POST /api/alerts</code> with
+          <code class="ci-mono text-xs">CI_API_KEY</code> (see docs/DEPLOY.md).
+        </p>
+      {:else}
+        <ul class="space-y-2 text-sm">
+          {#each alertRules as rule}
+            <li class="flex justify-between gap-4 border-b border-[var(--color-border)] pb-2 last:border-0">
+              <span class="font-medium text-[var(--color-ink)]">
+                {String(rule.name ?? "Unnamed rule")}
+              </span>
+              <span class="text-xs text-[var(--color-ink-faint)] shrink-0">
+                {String(rule.channel ?? "discord")}
+              </span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
     </div>
   </div>
 </div>

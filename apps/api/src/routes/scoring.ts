@@ -7,10 +7,7 @@ const app = new Hono();
 app.get("/", (c) => {
   const db = getDB();
   const rawLimit = Number(c.req.query("limit"));
-  const limit = Math.min(
-    Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1),
-    200,
-  );
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 50, 1), 200);
 
   const companies = db
     .prepare(
@@ -49,44 +46,49 @@ app.get("/:id", (c) => {
 });
 
 function computeBreakdown(db: Database, companyId: string): Record<string, number> {
-  const funding = db.prepare(
-    `SELECT COUNT(*) as rounds, COALESCE(SUM(amount_usd), 0) as total
-     FROM funding_rounds WHERE company_id = ?`
-  ).get(companyId);
+  const funding = db
+    .prepare(
+      `SELECT COUNT(*) as rounds, COALESCE(SUM(amount_usd), 0) as total
+     FROM funding_rounds WHERE company_id = ?`,
+    )
+    .get(companyId);
 
-  const github = db.prepare(
-    `SELECT COALESCE(star_growth_30d, 0) as stars, COALESCE(contributor_count, 0) as contributors,
+  const github = db
+    .prepare(
+      `SELECT COALESCE(star_growth_30d, 0) as stars, COALESCE(contributor_count, 0) as contributors,
             COALESCE(commits_last_30d, 0) as commits
-     FROM github_metrics WHERE company_id = ? ORDER BY extracted_at DESC LIMIT 1`
-  ).get(companyId);
+     FROM github_metrics WHERE company_id = ? ORDER BY extracted_at DESC LIMIT 1`,
+    )
+    .get(companyId);
 
-  const jobs = db.prepare(
-    `SELECT COUNT(*) as count FROM job_postings WHERE company_id = ? AND is_active = 1`
-  ).get(companyId);
+  const jobs = db
+    .prepare(`SELECT COUNT(*) as count FROM job_postings WHERE company_id = ? AND is_active = 1`)
+    .get(companyId);
 
-  const team = db.prepare(
-    `SELECT COUNT(*) as count FROM team_members WHERE company_id = ?`
-  ).get(companyId);
+  const team = db
+    .prepare(`SELECT COUNT(*) as count FROM team_members WHERE company_id = ?`)
+    .get(companyId);
 
-  const tech = db.prepare(
-    `SELECT COUNT(DISTINCT technology) as count FROM technology_stack WHERE company_id = ?`
-  ).get(companyId);
+  const tech = db
+    .prepare(
+      `SELECT COUNT(DISTINCT technology) as count FROM technology_stack WHERE company_id = ?`,
+    )
+    .get(companyId);
 
-  const signals = db.prepare(
-    `SELECT COUNT(*) as count FROM raw_signals WHERE company_id = ?`
-  ).get(companyId);
+  const signals = db
+    .prepare(`SELECT COUNT(*) as count FROM raw_signals WHERE company_id = ?`)
+    .get(companyId);
 
-  const events = db.prepare(
-    `SELECT COUNT(*) as count FROM intelligence_events WHERE company_id = ?`
-  ).get(companyId);
+  const events = db
+    .prepare(`SELECT COUNT(*) as count FROM intelligence_events WHERE company_id = ?`)
+    .get(companyId);
 
-  const fundingScore = funding.rounds > 0
-    ? Math.min((funding.total / 500_000_000) * 0.6 + 0.4, 1)
-    : 0.2;
+  const fundingScore =
+    funding.rounds > 0 ? Math.min((funding.total / 500_000_000) * 0.6 + 0.4, 1) : 0.2;
 
   const stars = github?.stars || 0;
   const contributors = github?.contributors || 0;
-  const efficiencyScore = contributors > 0 ? Math.min((stars / contributors) / 500, 1) : 0.2;
+  const efficiencyScore = contributors > 0 ? Math.min(stars / contributors / 500, 1) : 0.2;
 
   const signalScore = Math.min((signals?.count || 0) / 50, 1);
   const eventScore = Math.min((events?.count || 0) / 10, 1);
@@ -96,9 +98,15 @@ function computeBreakdown(db: Database, companyId: string): Record<string, numbe
   const techCount = tech?.count || 0;
   const depthScore = Math.min(commits / 200, 1) * 0.6 + Math.min(techCount / 20, 1) * 0.4;
 
-  const hiringScore = Math.min((jobs?.count || 0) / 15, 1) * 0.6 + Math.min((team?.count || 0) / 5, 1) * 0.4;
+  const hiringScore =
+    Math.min((jobs?.count || 0) / 15, 1) * 0.6 + Math.min((team?.count || 0) / 5, 1) * 0.4;
 
-  const moatScore = techCount > 10 ? 0.5 + Math.min(techCount / 50, 0.3) : techCount > 3 ? 0.3 + Math.min(techCount / 20, 0.2) : 0.2;
+  const moatScore =
+    techCount > 10
+      ? 0.5 + Math.min(techCount / 50, 0.3)
+      : techCount > 3
+        ? 0.3 + Math.min(techCount / 20, 0.2)
+        : 0.2;
 
   return {
     funding_round_quality: fundingScore,

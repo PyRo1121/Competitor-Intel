@@ -1,12 +1,12 @@
 """
-Lightweight Ollama API client
-Uses HTTP API to bare-metal Ollama (localhost:11434)
-No pip dependency needed.
+Lightweight Ollama HTTP client (localhost:11434).
+
+Use only for embedding/rerank. Do not call generate() for X ingest or funding
+extraction — use Grok/xAI (see grok_x_fetcher.py).
 """
 
 import logging
 import os
-from typing import Optional
 
 from utils.http import post_json
 
@@ -21,7 +21,7 @@ def generate(
     model: str = "qwen3.5:9b",
     temperature: float = 0.1,
     num_predict: int = 350,
-) -> Optional[str]:
+) -> str | None:
     """Generate text using the local Ollama /api/generate endpoint."""
     payload = {
         "model": model,

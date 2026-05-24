@@ -1,6 +1,6 @@
 export function signalLabelFromRow(
   signalType: string,
-  dataJson: string | null | undefined
+  dataJson: string | null | undefined,
 ): string {
   if (!dataJson) {
     return signalType;

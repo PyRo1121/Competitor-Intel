@@ -1,57 +1,157 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { onMount } from "svelte";
-  import { search } from "$lib/api";
+  import { goto } from "$app/navigation";
+  import { search, type SearchMode } from "$lib/api";
   import { Search, Building2, Calendar, Radio } from "lucide-svelte";
+  import PageHeader from "$lib/components/PageHeader.svelte";
 
-  let query = $derived($page.url.searchParams.get("q") || "");
-  let data: any = $state(null);
+  interface SearchCompany {
+    id: number;
+    name: string;
+    slug?: string | null;
+    industry?: string | null;
+    score?: number | null;
+  }
+
+  interface SearchSignal {
+    source?: string;
+    signal_label?: string;
+    signal_type?: string;
+    detected_at?: string;
+  }
+
+  interface SearchEvent {
+    company_name?: string;
+    event_type?: string;
+  }
+
+  interface SearchPayload {
+    mode?: string;
+    companies?: SearchCompany[];
+    events?: SearchEvent[];
+    signals?: SearchSignal[];
+  }
+
+  let query = $state("");
+  let mode = $state<SearchMode>("keyword");
+  let data = $state<SearchPayload | null>(null);
   let loading = $state(false);
+  let error = $state<string | null>(null);
+  let lastFetchedKey = $state("");
 
-  onMount(() => { if (query) doSearch(); });
+  const modes: { id: SearchMode; label: string }[] = [
+    { id: "keyword", label: "Keyword" },
+    { id: "auto", label: "Auto" },
+    { id: "semantic", label: "Semantic" },
+  ];
 
-  async function doSearch() {
-    if (!query.trim()) return;
+  $effect(() => {
+    const urlQ = $page.url.searchParams.get("q") ?? "";
+    const urlMode = ($page.url.searchParams.get("mode") ?? "keyword") as SearchMode;
+    if (urlQ !== query) query = urlQ;
+    if (modes.some((m) => m.id === urlMode) && urlMode !== mode) mode = urlMode;
+    const key = `${urlQ}|${mode}`;
+    if (urlQ && key !== lastFetchedKey) {
+      void runSearch(urlQ, mode);
+    }
+  });
+
+  function companyHref(company: SearchCompany): string {
+    const segment = company.slug?.trim() || String(company.id);
+    return `/companies/${segment}`;
+  }
+
+  async function runSearch(q: string, searchMode: SearchMode) {
+    const trimmed = q.trim();
+    if (!trimmed) {
+      data = null;
+      lastFetchedKey = "";
+      error = null;
+      return;
+    }
     loading = true;
+    error = null;
     try {
-      data = await search(query);
+      data = (await search(trimmed, searchMode)) as SearchPayload;
+      lastFetchedKey = `${trimmed}|${searchMode}`;
     } catch (e) {
+      error = e instanceof Error ? e.message : "Search failed";
       console.error(e);
+      data = null;
     } finally {
       loading = false;
     }
   }
+
+  async function onSubmit(e: Event) {
+    e.preventDefault();
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    const params = new URLSearchParams($page.url.searchParams);
+    params.set("q", trimmed);
+    params.set("mode", mode);
+    await goto(`/search?${params}`, { keepFocus: true, noScroll: true });
+    await runSearch(trimmed, mode);
+  }
 </script>
 
-<div class="p-8 max-w-5xl mx-auto">
-  <h1 class="text-2xl font-semibold text-slate-900 dark:text-slate-100 mb-6">Search</h1>
+<div class="ci-page max-w-5xl">
+  <PageHeader title="Search" subtitle="Keyword, auto-routed, or semantic lookup across companies, events, and signals." />
 
-  <div class="relative mb-8">
-    <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-    <input
-      bind:value={query}
-      placeholder="Search companies, events, signals..."
-      class="w-full rounded-lg border border-slate-200 bg-white py-3 pl-10 pr-4 text-slate-900 placeholder-slate-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-    />
-  </div>
+  <form class="mb-4 flex flex-wrap items-center gap-3" onsubmit={onSubmit}>
+    <div class="relative min-w-[16rem] flex-1">
+      <Search size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-ink-faint)]" />
+      <input
+        bind:value={query}
+        placeholder="Search companies, events, signals..."
+        class="ci-field py-3 pl-10 pr-4"
+      />
+    </div>
+    <select bind:value={mode} class="ci-field w-auto px-3 py-3" aria-label="Search mode">
+      {#each modes as m}
+        <option value={m.id}>{m.label}</option>
+      {/each}
+    </select>
+    <button type="submit" class="ci-btn-primary">Search</button>
+  </form>
+
+  {#if error}
+    <div class="ci-alert-error mb-6" role="alert">{error}</div>
+  {/if}
 
   {#if loading}
     <div class="space-y-3">
       {#each [1, 2, 3] as _}
-        <div class="h-16 bg-slate-100 animate-pulse rounded-xl dark:bg-slate-800"></div>
+        <div class="ci-skeleton h-16"></div>
       {/each}
     </div>
   {:else if data}
-    {#if data.companies?.length > 0}
+    {#if data.mode}
+      <p class="text-xs text-[var(--color-ink-muted)] mb-4">
+        Search mode: <span class="font-medium text-[var(--color-ink)]">{data.mode}</span>
+      </p>
+    {/if}
+
+    {#if data.companies?.length}
       <div class="mb-8">
-        <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Companies</h2>
+        <h2 class="text-sm font-semibold text-[var(--color-ink-faint)] uppercase tracking-wide mb-3">Companies</h2>
         <div class="space-y-2">
           {#each data.companies as company}
-            <a href={`/companies/${company.id}`} class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 hover:border-amber-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-amber-700 transition-colors">
-              <Building2 size={18} class="text-slate-400" />
+            <a
+              href={companyHref(company)}
+              class="ci-panel flex items-center gap-3 p-4 transition-colors hover:border-[var(--color-accent)]"
+            >
+              <Building2 size={18} class="text-[var(--color-ink-faint)]" />
               <div>
-                <p class="font-medium text-slate-900 dark:text-slate-100">{company.name}</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{company.industry || "Technology"}</p>
+                <p class="font-medium text-[var(--color-ink)]">
+                  {company.name}
+                  {#if company.score != null}
+                    <span class="ml-2 text-xs font-normal text-[var(--color-accent)]">
+                      {Number(company.score).toFixed(2)}
+                    </span>
+                  {/if}
+                </p>
+                <p class="text-xs text-[var(--color-ink-muted)]">{company.industry || "Technology"}</p>
               </div>
             </a>
           {/each}
@@ -59,16 +159,16 @@
       </div>
     {/if}
 
-    {#if data.events?.length > 0}
+    {#if data.events?.length}
       <div class="mb-8">
-        <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Events</h2>
+        <h2 class="text-sm font-semibold text-[var(--color-ink-faint)] uppercase tracking-wide mb-3">Events</h2>
         <div class="space-y-2">
           {#each data.events as event}
-            <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-              <Calendar size={18} class="text-slate-400" />
+            <div class="ci-panel flex items-center gap-3 p-4">
+              <Calendar size={18} class="text-[var(--color-ink-faint)]" />
               <div>
-                <p class="font-medium text-slate-900 dark:text-slate-100">{event.company_name || "Unknown"}</p>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{event.event_type}</p>
+                <p class="font-medium text-[var(--color-ink)]">{event.company_name || "Unknown"}</p>
+                <p class="text-xs text-[var(--color-ink-muted)]">{event.event_type}</p>
               </div>
             </div>
           {/each}
@@ -76,16 +176,18 @@
       </div>
     {/if}
 
-    {#if data.signals?.length > 0}
+    {#if data.signals?.length}
       <div class="mb-8">
-        <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">Signals</h2>
+        <h2 class="text-sm font-semibold text-[var(--color-ink-faint)] uppercase tracking-wide mb-3">Signals</h2>
         <div class="space-y-2">
           {#each data.signals as signal}
-            <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-              <Radio size={18} class="text-slate-400" />
+            <div class="ci-panel flex items-center gap-3 p-4">
+              <Radio size={18} class="text-[var(--color-ink-faint)]" />
               <div>
-                <p class="text-sm text-slate-700 dark:text-slate-300">{signal.source} {signal.signal_label || signal.signal_type}</p>
-                <p class="text-xs text-slate-400 dark:text-slate-500">{signal.detected_at?.slice(0, 16)}</p>
+                <p class="text-sm text-[var(--color-ink-muted)]">
+                  {signal.source} {signal.signal_label || signal.signal_type}
+                </p>
+                <p class="text-xs text-[var(--color-ink-faint)]">{signal.detected_at?.slice(0, 16)}</p>
               </div>
             </div>
           {/each}
@@ -94,7 +196,7 @@
     {/if}
 
     {#if !data.companies?.length && !data.events?.length && !data.signals?.length}
-      <p class="text-slate-500 dark:text-slate-400 text-center py-12">No results for "{query}"</p>
+      <p class="text-[var(--color-ink-muted)] text-center py-12">No results for "{query}"</p>
     {/if}
   {/if}
 </div>

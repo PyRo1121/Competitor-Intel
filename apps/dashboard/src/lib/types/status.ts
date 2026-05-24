@@ -3,61 +3,71 @@
 export type FreshnessLevel = "healthy" | "warning" | "stale" | "unknown";
 
 export interface StatusCounts {
-	companies: number;
-	signals: number;
-	events: number;
-	funding: number;
-	xPosts: number;
-	pendingCandidates?: number;
+  companies: number;
+  signals: number;
+  events: number;
+  funding: number;
+  xPosts: number;
+  pendingCandidates?: number;
 }
 
 export interface StatusLast24h {
-	signals: number;
-	events: number;
+  signals: number;
+  events: number;
 }
 
 export interface StatusFreshness {
-	lastSignalAt: string | null;
-	lastEventAt: string | null;
-	lastXAt: string | null;
+  lastSignalAt: string | null;
+  lastEventAt: string | null;
+  lastXAt: string | null;
 }
 
 export interface StatusTopSource {
-	source: string;
-	count: number;
+  source: string;
+  count: number;
 }
 
 export interface StatusRecentEvent {
-	event_type: string;
-	company_name: string | null;
-	amount_usd: number | null;
-	created_at: string;
+  event_type: string;
+  company_name: string | null;
+  amount_usd: number | null;
+  created_at: string;
+}
+
+export interface IngestCatalog {
+  generated: string;
+  rssFeedsEnabled: number;
+  rssFeedsTotal: number;
+  rssFeedsDisabled: number;
+  xMonitorQueries: number;
+  youtubeChannels: number;
 }
 
 export interface StatusResponse {
-	counts: StatusCounts;
-	last24h: StatusLast24h;
-	freshness?: StatusFreshness;
-	topSources: StatusTopSource[];
-	recentEvents: StatusRecentEvent[];
-	queriedAt?: string;
+  counts: StatusCounts;
+  last24h: StatusLast24h;
+  freshness?: StatusFreshness;
+  topSources: StatusTopSource[];
+  recentEvents: StatusRecentEvent[];
+  queriedAt?: string;
+  ingestCatalog?: IngestCatalog | null;
 }
 
 export interface FreshnessMetric {
-	key: keyof StatusFreshness;
-	label: string;
-	shortLabel: string;
-	at: string | null;
-	level: FreshnessLevel;
-	relativeLabel: string;
-	absoluteLabel: string;
+  key: keyof StatusFreshness;
+  label: string;
+  shortLabel: string;
+  at: string | null;
+  level: FreshnessLevel;
+  relativeLabel: string;
+  absoluteLabel: string;
 }
 
 export interface IngestHealthSummary {
-	/** Core RSS + events pipeline (excludes X). */
-	overall: FreshnessLevel;
-	pipelineOverall?: FreshnessLevel;
-	metrics: FreshnessMetric[];
-	apiReachable: boolean;
-	queriedAt: string | null;
+  /** Core RSS + events pipeline (excludes X). */
+  overall: FreshnessLevel;
+  pipelineOverall?: FreshnessLevel;
+  metrics: FreshnessMetric[];
+  apiReachable: boolean;
+  queriedAt: string | null;
 }

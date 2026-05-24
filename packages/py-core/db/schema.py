@@ -3,16 +3,15 @@ Competitor Intelligence SQLite Schema
 Local-first database for competitive monitoring.
 """
 
+import logging
+import os
 import sqlite3
 from pathlib import Path
-from datetime import datetime
-import logging
 
-from ci_paths import db_path
+from db.connection import active_db_path
+from db.migrations import apply_runtime_migrations
 
 logger = logging.getLogger(__name__)
-
-DB_PATH = db_path()
 
 SCHEMA = """
 -- Core companies table
@@ -147,7 +146,7 @@ CREATE TABLE IF NOT EXISTS company_details (
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 );
 
--- Structured funding rounds (detailed history)
+-- Canonical funding rounds (aggregated from funding_round_claims)
 CREATE TABLE IF NOT EXISTS funding_rounds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id INTEGER NOT NULL,
@@ -160,8 +159,117 @@ CREATE TABLE IF NOT EXISTS funding_rounds (
     source TEXT,
     source_url TEXT,
     confidence REAL DEFAULT 0.8,
+    cluster_key TEXT,
+    report_count INTEGER DEFAULT 1,
+    official_report_count INTEGER DEFAULT 0,
+    corroboration_score REAL DEFAULT 0.5,
+    source_tier_best TEXT,
+    fields_provenance TEXT,     -- JSON per-field sources and tiers
+    currency TEXT DEFAULT 'USD',
+    pre_money_valuation_usd INTEGER,
+    post_money_valuation_usd INTEGER,
+    instrument_type TEXT,       -- equity, safe, convertible_note, debt
+    total_investor_count INTEGER DEFAULT 0,
     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+);
+
+-- Per-source funding observations (source of truth before aggregation)
+CREATE TABLE IF NOT EXISTS funding_round_claims (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL,
+    funding_round_id INTEGER,
+    intelligence_event_id INTEGER,
+    raw_signal_id INTEGER,
+    round_type TEXT NOT NULL,
+    amount_usd INTEGER,
+    valuation_usd INTEGER,
+    lead_investor TEXT,
+    co_investors TEXT,
+    announced_date TEXT,
+    source TEXT NOT NULL,
+    source_url TEXT UNIQUE,
+    source_tier TEXT NOT NULL,
+    source_weight REAL NOT NULL,
+    is_official INTEGER DEFAULT 0,
+    is_rumor INTEGER DEFAULT 0,
+    extraction_confidence REAL,
+    headline TEXT,
+    snippet TEXT,
+    currency TEXT DEFAULT 'USD',
+    pre_money_valuation_usd INTEGER,
+    post_money_valuation_usd INTEGER,
+    instrument_type TEXT,
+    deal_terms_text TEXT,
+    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE,
+    FOREIGN KEY (funding_round_id) REFERENCES funding_rounds(id) ON DELETE SET NULL
+);
+
+-- Global investor firms (VCs, strategics) — not tied to a single portfolio company
+CREATE TABLE IF NOT EXISTS investor_firms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    name_normalized TEXT UNIQUE,
+    investor_type TEXT DEFAULT 'VC',
+    tier INTEGER DEFAULT 3,
+    website TEXT,
+    twitter TEXT,
+    linkedin TEXT,
+    location TEXT,
+    description TEXT,
+    first_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Per-outlet investor mentions on a single claim
+CREATE TABLE IF NOT EXISTS funding_claim_participants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    funding_round_claim_id INTEGER NOT NULL,
+    investor_id INTEGER,
+    investor_name_raw TEXT NOT NULL,
+    role TEXT NOT NULL,
+    is_lead INTEGER DEFAULT 0,
+    amount_usd INTEGER,
+    excerpt TEXT,
+    FOREIGN KEY (funding_round_claim_id) REFERENCES funding_round_claims(id) ON DELETE CASCADE,
+    FOREIGN KEY (investor_id) REFERENCES investor_firms(id) ON DELETE SET NULL
+);
+
+-- Aggregated investors on a canonical funding round
+CREATE TABLE IF NOT EXISTS round_participants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    funding_round_id INTEGER NOT NULL,
+    investor_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    is_lead INTEGER DEFAULT 0,
+    amount_invested_usd INTEGER,
+    report_count INTEGER DEFAULT 1,
+    source_domain_count INTEGER DEFAULT 1,
+    corroboration_score REAL DEFAULT 0.5,
+    has_official_source INTEGER DEFAULT 0,
+    updated_at TEXT,
+    FOREIGN KEY (funding_round_id) REFERENCES funding_rounds(id) ON DELETE CASCADE,
+    FOREIGN KEY (investor_id) REFERENCES investor_firms(id) ON DELETE CASCADE,
+    UNIQUE(funding_round_id, investor_id)
+);
+
+-- Which claim(s) reported each round participant
+CREATE TABLE IF NOT EXISTS participant_source_attributions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_participant_id INTEGER NOT NULL,
+    funding_round_claim_id INTEGER NOT NULL,
+    investor_id INTEGER,
+    role TEXT,
+    amount_usd INTEGER,
+    excerpt TEXT,
+    source_url TEXT,
+    source_tier TEXT,
+    is_official INTEGER DEFAULT 0,
+    FOREIGN KEY (round_participant_id) REFERENCES round_participants(id) ON DELETE CASCADE,
+    FOREIGN KEY (funding_round_claim_id) REFERENCES funding_round_claims(id) ON DELETE CASCADE,
+    UNIQUE(round_participant_id, funding_round_claim_id)
 );
 
 -- Team members (key hires, departures)
@@ -368,7 +476,8 @@ CREATE INDEX IF NOT EXISTS idx_company_details ON company_details(company_id);
 CREATE INDEX IF NOT EXISTS idx_competitive ON competitive_positioning(company_id, dimension);
 CREATE INDEX IF NOT EXISTS idx_jobs_company ON job_postings(company_id, posted_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_active ON job_postings(company_id, is_active);
-CREATE INDEX IF NOT EXISTS idx_competitor_rel ON competitor_relationships(company_id, competitor_id);
+CREATE INDEX IF NOT EXISTS idx_competitor_rel
+    ON competitor_relationships(company_id, competitor_id);
 CREATE INDEX IF NOT EXISTS idx_tech_stack ON technology_stack(company_id, category);
 CREATE INDEX IF NOT EXISTS idx_website_snap ON website_snapshots(company_id, captured_at);
 CREATE INDEX IF NOT EXISTS idx_customer_signals ON customer_signals(company_id, signal_date);
@@ -378,7 +487,7 @@ CREATE INDEX IF NOT EXISTS idx_alerts_sent ON alerts_sent(sent_at);
 
 -- Views for common queries
 CREATE VIEW IF NOT EXISTS v_recent_signals AS
-SELECT 
+SELECT
     c.name,
     rs.source,
     rs.signal_type,
@@ -390,54 +499,83 @@ WHERE rs.detected_at >= datetime('now', '-7 days')
 ORDER BY rs.detected_at DESC;
 """
 
+
+def ensure_raw_signals_dedup_index(conn: sqlite3.Connection) -> None:
+    """Ensure UNIQUE(source, signal_type) on raw_signals; fail loud in prod modes."""
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_raw_signals_dedup'"
+    )
+    if cursor.fetchone():
+        return
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX idx_raw_signals_dedup ON raw_signals(source, signal_type)"
+        )
+        conn.commit()
+    except sqlite3.IntegrityError as exc:
+        conn.rollback()
+        msg = (
+            "Cannot create idx_raw_signals_dedup: duplicate (source, signal_type) rows. "
+            "Run: make migrate-dedup"
+        )
+        strict = os.environ.get("CI_STRICT_PIPELINE", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        require = os.environ.get("CI_REQUIRE_DEDUP_INDEX", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if strict or require:
+            raise RuntimeError(msg) from exc
+        logger.warning("Skipped idx_raw_signals_dedup: %s", exc)
+
+
 def init_database():
     """Initialize the database with full schema and optimizations."""
-    Path(DB_PATH.parent).mkdir(parents=True, exist_ok=True)
-    
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = NORMAL")
-    conn.execute("PRAGMA cache_size = -64000")
-    conn.execute("PRAGMA temp_store = MEMORY")
+    path = active_db_path()
+    Path(path.parent).mkdir(parents=True, exist_ok=True)
+
+    from db.connection import configure_connection
+
+    conn = sqlite3.connect(str(path), timeout=60.0)
+    configure_connection(conn, profile="maintenance")
 
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='website_snapshots'")
     if cursor.fetchone():
         cursor.execute("PRAGMA table_info(website_snapshots)")
         cols = [c[1] for c in cursor.fetchall()]
-        if 'captured_at' not in cols:
+        if "captured_at" not in cols:
             cursor.execute("DROP TABLE website_snapshots")
             conn.commit()
 
     conn.executescript(SCHEMA)
     conn.commit()
 
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_raw_signals_dedup'"
-    )
-    if not cursor.fetchone():
-        try:
-            conn.execute(
-                "CREATE UNIQUE INDEX idx_raw_signals_dedup ON raw_signals(source, signal_type)"
-            )
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.rollback()
-            logger.warning(
-                "Skipped idx_raw_signals_dedup: duplicate (source, signal_type) rows in DB"
-            )
+    ensure_raw_signals_dedup_index(conn)
+
+    apply_runtime_migrations(conn)
+
+    # maintenance uses EXCLUSIVE locking_mode — reset before close so collectors/API can connect
+    conn.execute("PRAGMA locking_mode = NORMAL")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.commit()
 
     # Seed initial companies if empty
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM companies")
     if cursor.fetchone()[0] == 0:
         seed_companies(conn)
-    
+
     conn.close()
-    logger.info("Database initialized at %s", DB_PATH)
-    return DB_PATH
+    logger.info("Database initialized at %s", path)
+    return path
+
 
 def seed_companies(conn):
     """Seed with the 16 core AI competitors."""
@@ -459,16 +597,20 @@ def seed_companies(conn):
         ("Adept", "adept", "https://adept.ai", "adeptailabs", None),
         ("Anthropic", "anthropic", "https://anthropic.com", "anthropicai", None),
     ]
-    
+
     for name, slug, website, x_handle, github_org in companies:
-        conn.execute("""
-            INSERT OR IGNORE INTO companies 
-            (name, slug, website, x_handle, github_org) 
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO companies
+            (name, slug, website, x_handle, github_org)
             VALUES (?, ?, ?, ?, ?)
-        """, (name, slug, website, x_handle, github_org))
-    
+        """,
+            (name, slug, website, x_handle, github_org),
+        )
+
     conn.commit()
     logger.info("Seeded %d initial companies", len(companies))
+
 
 if __name__ == "__main__":
     init_database()

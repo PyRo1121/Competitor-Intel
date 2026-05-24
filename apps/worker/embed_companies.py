@@ -5,9 +5,11 @@ Embed all companies using qwen3-embedding:4b and store in the database.
 import json
 import logging
 import sqlite3
+from contextlib import suppress
+
+from ci_paths import db_path
 
 from embeddings import get_embedding
-from ci_paths import db_path
 
 logger = logging.getLogger("embed_companies")
 
@@ -20,10 +22,8 @@ def embed_companies():
     cursor = conn.cursor()
 
     # Add embedding column if it doesn't exist
-    try:
+    with suppress(sqlite3.OperationalError):
         cursor.execute("ALTER TABLE companies ADD COLUMN embedding BLOB")
-    except sqlite3.OperationalError:
-        pass  # column already exists
 
     cursor.execute(
         "SELECT id, name, description FROM companies WHERE embedding IS NULL OR embedding = ''"

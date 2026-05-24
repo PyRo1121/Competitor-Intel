@@ -7,41 +7,15 @@ Loads companies dynamically from DB.
 
 import json
 import logging
-import re
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 
 logger = logging.getLogger("funding_collector")
 
-from db.connection import get_conn, DB_PATH
+from db.connection import get_conn
 
-
-
-
-
-def extract_amount(text: str):
-    """Extract USD amount from text using regex patterns."""
-    if not text:
-        return None
-    patterns = [
-        r"\$?\s*([0-9,.]+)\s*(billion|b)",
-        r"\$?\s*([0-9,.]+)\s*(million|m)",
-    ]
-    for pattern in patterns:
-        m = re.search(pattern, text, re.IGNORECASE)
-        if m:
-            num_str = m.group(1).replace(",", "").strip()
-            if not num_str:
-                continue
-            try:
-                num = float(num_str)
-            except ValueError:
-                continue
-            unit = m.group(2).lower()
-            multiplier = 1_000_000_000 if unit.startswith("b") else 1_000_000
-            return int(num * multiplier)
-    return None
+from collectors.funding_parse import parse_amount_usd as extract_amount
+from collectors.pipeline_guard import strict_pipeline_blocks_legacy_events
 
 
 def get_companies(conn: sqlite3.Connection):
@@ -66,9 +40,7 @@ def create_event(event: dict) -> bool:
     dedup = event.get("source_url") or hash(str(event))
 
     try:
-        cursor.execute(
-            "SELECT 1 FROM intelligence_events WHERE source_url = ?", (dedup,)
-        )
+        cursor.execute("SELECT 1 FROM intelligence_events WHERE source_url = ?", (dedup,))
         if cursor.fetchone():
             return False
 
@@ -103,14 +75,14 @@ def create_event(event: dict) -> bool:
 
 def run() -> int:
     """Extract funding events from raw signals."""
+    if strict_pipeline_blocks_legacy_events("funding_collector"):
+        return 0
     logger.info("Running Funding Extraction Collector")
     conn = get_conn()
     cursor = conn.cursor()
     companies = get_companies(conn)
 
-    cursor.execute(
-        "SELECT id, data_json FROM raw_signals ORDER BY detected_at DESC LIMIT 400"
-    )
+    cursor.execute("SELECT id, data_json FROM raw_signals ORDER BY detected_at DESC LIMIT 400")
     rows = cursor.fetchall()
     conn.close()
 
@@ -118,9 +90,7 @@ def run() -> int:
     for row in rows:
         try:
             data = json.loads(row["data_json"])
-            text = " ".join(
-                str(data.get(k, "")) for k in ["title", "summary", "content"]
-            )
+            text = " ".join(str(data.get(k, "")) for k in ["title", "summary", "content"])
 
             amount = extract_amount(text)
             if not amount or amount < 5_000_000:
@@ -156,7 +126,7 @@ def run() -> int:
                 logger.info("Created event: %s — %s $%s", company_id, event_type, amount)
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.warning("Error processing signal %s: %s", row['id'], e)
+            logger.warning("Error processing signal %s: %s", row["id"], e)
             continue
 
     logger.info("Funding extraction complete. Created %s events.", created)

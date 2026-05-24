@@ -2,8 +2,8 @@
 """Wellfound (AngelList) blog RSS collector."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 from xml.etree import ElementTree as ET
 
 from db.connection import get_conn
@@ -15,16 +15,40 @@ logger = logging.getLogger("angellist")
 FEED_URL = "https://angel.co/blog/feed"
 
 COMPANY_KEYWORDS = [
-    "Cursor", "Perplexity", "Cognition", "Harvey", "ElevenLabs",
-    "Runway", "Linear", "Notion", "Arc", "Coda", "Height",
-    "Mem", "Limitless", "Rewind", "Adept", "Anthropic",
-    "OpenAI", "Midjourney", "Stability AI", "Cohere",
-    "Hugging Face", "LangChain", "Pinecone", "Vercel", "Supabase",
-    "Stripe", "Figma", "Airtable", "Zapier", "Webflow",
+    "Cursor",
+    "Perplexity",
+    "Cognition",
+    "Harvey",
+    "ElevenLabs",
+    "Runway",
+    "Linear",
+    "Notion",
+    "Arc",
+    "Coda",
+    "Height",
+    "Mem",
+    "Limitless",
+    "Rewind",
+    "Adept",
+    "Anthropic",
+    "OpenAI",
+    "Midjourney",
+    "Stability AI",
+    "Cohere",
+    "Hugging Face",
+    "LangChain",
+    "Pinecone",
+    "Vercel",
+    "Supabase",
+    "Stripe",
+    "Figma",
+    "Airtable",
+    "Zapier",
+    "Webflow",
 ]
 
 
-def fetch() -> List[Dict[str, Any]]:
+def fetch() -> list[dict[str, Any]]:
     body = fetch_text(FEED_URL, timeout=20.0)
     if not body:
         return []
@@ -52,7 +76,7 @@ def fetch() -> List[Dict[str, Any]]:
         return []
 
 
-def extract_companies(text: str) -> List[str]:
+def extract_companies(text: str) -> list[str]:
     return list({kw for kw in COMPANY_KEYWORDS if kw.lower() in text.lower()})
 
 
@@ -65,11 +89,11 @@ def classify(title: str, desc: str) -> str:
     return "news"
 
 
-def store(items: List[Dict[str, Any]]) -> int:
+def store(items: list[dict[str, Any]]) -> int:
     conn = get_conn()
     cursor = conn.cursor()
     stored = 0
-    detected_at = datetime.now(timezone.utc).isoformat()
+    detected_at = datetime.now(UTC).isoformat()
 
     for item in items:
         companies = extract_companies(item["title"] + " " + item["description"])

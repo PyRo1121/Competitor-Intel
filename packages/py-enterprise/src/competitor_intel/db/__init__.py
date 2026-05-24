@@ -1,6 +1,7 @@
 """Database module."""
-from .models import Base, Company, FundingEvent, RawSignal, IntelligenceEvent
-from .session import get_session, init_db, engine
+
+from .models import Base, Company, FundingEvent, IntelligenceEvent, RawSignal
+from .session import engine, get_session, init_db
 
 __all__ = [
     "Base",

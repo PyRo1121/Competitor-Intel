@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import logging
-import sqlite3
 import re
-from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import Any
 
 from db.connection import get_conn
+
 from collectors.enrichment.utils import safe_request
 
 logger = logging.getLogger("tech_stack")
@@ -65,13 +64,13 @@ TECH_PATTERNS = {
 }
 
 
-def detect_from_website(website: str) -> List[Dict[str, Any]]:
+def detect_from_website(website: str) -> list[dict[str, Any]]:
     if not website:
         return []
     try:
         if not website.startswith("http"):
             website = "https://" + website
-        resp = safe_request(website, timeout=15, allow_redirects=True)
+        resp = safe_request(website, timeout=15)
         if not resp:
             return []
         text = resp.text.lower()
@@ -79,19 +78,21 @@ def detect_from_website(website: str) -> List[Dict[str, Any]]:
         for category, patterns in TECH_PATTERNS.items():
             for tech, pattern in patterns:
                 if re.search(pattern, text, re.IGNORECASE):
-                    detected.append({
-                        "category": category,
-                        "technology": tech,
-                        "source": "website",
-                        "confidence": 0.6,
-                    })
+                    detected.append(
+                        {
+                            "category": category,
+                            "technology": tech,
+                            "source": "website",
+                            "confidence": 0.6,
+                        }
+                    )
         return detected
     except Exception as e:
         logger.error("Failed to detect from %s: %s", website, e)
         return []
 
 
-def detect_from_github(github_org: str) -> List[Dict[str, Any]]:
+def detect_from_github(github_org: str) -> list[dict[str, Any]]:
     if not github_org:
         return []
     try:
@@ -111,19 +112,21 @@ def detect_from_github(github_org: str) -> List[Dict[str, Any]]:
         total = sum(lang_counts.values())
         for lang, count in lang_counts.items():
             if total > 0 and count / total > 0.1:
-                detected.append({
-                    "category": "backend",
-                    "technology": lang.lower(),
-                    "source": "github",
-                    "confidence": min(0.5 + (count / total) * 0.5, 0.95),
-                })
+                detected.append(
+                    {
+                        "category": "backend",
+                        "technology": lang.lower(),
+                        "source": "github",
+                        "confidence": min(0.5 + (count / total) * 0.5, 0.95),
+                    }
+                )
         return detected
     except Exception as e:
         logger.error("Failed to detect from GitHub %s: %s", github_org, e)
         return []
 
 
-def store_tech_stack(company_id: int, detections: List[Dict[str, Any]]):
+def store_tech_stack(company_id: int, detections: list[dict[str, Any]]):
     if not detections:
         return
     conn = get_conn()
@@ -131,7 +134,9 @@ def store_tech_stack(company_id: int, detections: List[Dict[str, Any]]):
     for det in detections:
         cursor.execute(
             """
-            INSERT INTO technology_stack (company_id, category, technology, detection_source, confidence)
+            INSERT INTO technology_stack (
+                company_id, category, technology, detection_source, confidence
+            )
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING
             """,

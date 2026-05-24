@@ -5,7 +5,7 @@ Runs the complete pipeline with proper logging, transactions, and error recovery
 
 Pipeline stages (post-collection; raw ingest is automation/parallel_collect.py):
   1. Schema verification
-  2. Intelligence extraction (funding + big deals from raw signals)
+  2. Intelligence extraction (legacy scripts; canonical path is signal_processor in daily)
   3. Embedding generation (companies + events via Ollama)
   4. Report generation (daily brief + Discord)
 
@@ -22,7 +22,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from ci_paths import MONOREPO_ROOT, ensure_app_paths
 
@@ -44,8 +44,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("run_intel")
 
-from db.connection import get_conn, DB_PATH
+from db.connection import get_conn
+
 STATE_FILE = MONOREPO_ROOT / ".pipeline_state.json"
+
 
 class PipelineState:
     """Persistent pipeline state for resumable execution."""
@@ -54,7 +56,7 @@ class PipelineState:
         self.state_file = state_file
         self.data = self._load()
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         if self.state_file.exists():
             try:
                 return json.loads(self.state_file.read_text())
@@ -72,17 +74,16 @@ class PipelineState:
     def is_stage_complete(self, stage: str) -> bool:
         return self.data.get("last_completed_stage") == stage
 
-    def log_run(self, result: Dict[str, Any]):
+    def log_run(self, result: dict[str, Any]):
         runs = self.data.setdefault("runs", [])
-        runs.append({
-            "timestamp": datetime.now().isoformat(),
-            **result,
-        })
+        runs.append(
+            {
+                "timestamp": datetime.now().isoformat(),
+                **result,
+            }
+        )
         # Keep last 30 runs
         self.data["runs"] = runs[-30:]
-
-
-
 
 
 def ensure_schema() -> bool:
@@ -118,7 +119,7 @@ def ensure_schema() -> bool:
         return False
 
 
-def _run_extraction_script(script: str, dry_run: bool = False) -> Tuple[bool, float, Optional[str]]:
+def _run_extraction_script(script: str, dry_run: bool = False) -> tuple[bool, float, str | None]:
     """Run an extraction script via subprocess (consistent with daily_intel timing)."""
     import subprocess
 
@@ -139,11 +140,11 @@ def _run_extraction_script(script: str, dry_run: bool = False) -> Tuple[bool, fl
     return True, elapsed, None
 
 
-def backfill_intelligence_events(dry_run: bool = False) -> Dict[str, Any]:
-    """Extract funding / deal events from raw signals."""
+def backfill_intelligence_events(dry_run: bool = False) -> dict[str, Any]:
+    """Run EXTRACTION_SCRIPTS if any (empty by default; use signal_processor in daily)."""
     logger.info("=== Stage 2: Intelligence Extraction ===")
     stage_start = time.perf_counter()
-    results: Dict[str, Any] = {}
+    results: dict[str, Any] = {}
     success_count = 0
 
     for script in EXTRACTION_SCRIPTS:
@@ -169,7 +170,7 @@ def backfill_intelligence_events(dry_run: bool = False) -> Dict[str, Any]:
     }
 
 
-def embed_all(dry_run: bool = False) -> Dict[str, Any]:
+def embed_all(dry_run: bool = False) -> dict[str, Any]:
     """Generate embeddings for companies and intelligence events."""
     logger.info("=== Stage 3: Embedding Generation ===")
     stage_start = time.perf_counter()
@@ -185,11 +186,12 @@ def embed_all(dry_run: bool = False) -> Dict[str, Any]:
         logger.warning(f"Embedding module not available: {e}")
         return {"stage": "embedding", "success": False, "error": str(e)}
 
-    stats = {"companies": 0, "events": 0, "errors": []}
+    stats: dict[str, Any] = {"companies": 0, "events": 0, "errors": []}
 
     # Embed companies
     try:
         from embed_companies import embed_companies
+
         embed_companies()
         stats["companies"] = "completed"
         logger.info("✓ Company embeddings updated")
@@ -230,7 +232,7 @@ def embed_all(dry_run: bool = False) -> Dict[str, Any]:
                     # Commit every 10 to avoid large transactions
                     if updated % 10 == 0:
                         conn.commit()
-                        logger.debug(f"  Committed batch of 10 embeddings")
+                        logger.debug("  Committed batch of 10 embeddings")
 
                 except Exception as e:
                     failed += 1
@@ -256,15 +258,17 @@ def embed_all(dry_run: bool = False) -> Dict[str, Any]:
     return {"stage": "embedding", **stats}
 
 
-def generate_reports(dry_run: bool = False) -> Dict[str, Any]:
+def generate_reports(dry_run: bool = False) -> dict[str, Any]:
     """Generate daily brief and Discord report."""
     logger.info("=== Stage 4: Report Generation ===")
     stage_start = time.perf_counter()
-    stats = {"daily_brief": False, "discord": False}
+    stats: dict[str, Any] = {"daily_brief": False, "discord": False}
+    brief = None
 
     # Daily brief
     try:
-        from daily_brief import generate_daily_brief, export_brief
+        from daily_brief import export_brief, generate_daily_brief
+
         brief = generate_daily_brief()
         if not dry_run:
             export_brief(brief)
@@ -275,13 +279,16 @@ def generate_reports(dry_run: bool = False) -> Dict[str, Any]:
 
     # Discord report
     try:
-        from discord_report import post_to_discord
         from daily_brief import format_for_discord
-        if not dry_run:
+        from discord_report import post_to_discord
+
+        if not dry_run and brief is not None:
             embed = format_for_discord(brief)
             post_to_discord(embed)
-        stats["discord"] = True
-        logger.info("✓ Discord report posted")
+            stats["discord"] = True
+            logger.info("✓ Discord report posted")
+        elif brief is None:
+            logger.warning("Skipping Discord report: no daily brief")
     except Exception as e:
         logger.warning("Discord report failed: %s", e)
 
@@ -340,14 +347,15 @@ def run_full_sweep(dry_run: bool = False) -> int:
     logger.info("[OK] Full sweep complete in %.1fs", elapsed)
     logger.info("   State saved to %s", STATE_FILE)
 
-    extraction_success = extraction_results.get("success_count", 0)
-    if extraction_success < len(EXTRACTION_SCRIPTS):
-        logger.warning(
-            "Extraction incomplete: %s/%s scripts succeeded",
-            extraction_success,
-            len(EXTRACTION_SCRIPTS),
-        )
-        return 1
+    if EXTRACTION_SCRIPTS:
+        extraction_success = extraction_results.get("success_count", 0)
+        if extraction_success < len(EXTRACTION_SCRIPTS):
+            logger.warning(
+                "Extraction incomplete: %s/%s scripts succeeded",
+                extraction_success,
+                len(EXTRACTION_SCRIPTS),
+            )
+            return 1
 
     return 0
 
@@ -355,7 +363,9 @@ def run_full_sweep(dry_run: bool = False) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Competitor Intelligence Pipeline")
     parser.add_argument("--dry-run", action="store_true", help="Validate without storing data")
-    parser.add_argument("--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO")
+    parser.add_argument(
+        "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], default="INFO"
+    )
     args = parser.parse_args()
 
     if args.log_level:

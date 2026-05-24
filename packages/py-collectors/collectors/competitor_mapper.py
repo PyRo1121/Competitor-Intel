@@ -2,14 +2,15 @@
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Dict, List, Any, Tuple
 from collections import defaultdict
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger("competitor_mapper")
 
 from db.connection import get_conn
-from collectors.signal_processor_v2 import fuzzy_match_company, load_aliases
+
+from collectors.signal_processor import load_aliases
 
 INDUSTRY_KEYWORDS = {
     "ai_infra": ["llm", "model", "training", "inference", "gpu", "compute", "foundation model"],
@@ -23,8 +24,8 @@ INDUSTRY_KEYWORDS = {
 }
 
 
-def extract_companies_from_text(text: str, cursor: sqlite3.Cursor) -> List[Tuple[int, str]]:
-    aliases = load_aliases(cursor)
+def extract_companies_from_text(text: str, cursor: sqlite3.Cursor) -> list[tuple[int, str]]:
+    load_aliases(cursor)
     text_lower = text.lower()
     found = []
     cursor.execute("SELECT id, name FROM companies")
@@ -34,7 +35,7 @@ def extract_companies_from_text(text: str, cursor: sqlite3.Cursor) -> List[Tuple
     return found
 
 
-def compute_overlap_areas(company_a: dict, company_b: dict) -> List[str]:
+def compute_overlap_areas(company_a: dict, company_b: dict) -> list[str]:
     areas = []
     for industry, keywords in INDUSTRY_KEYWORDS.items():
         a_text = " ".join(str(v or "") for v in company_a.values()).lower()
@@ -43,27 +44,30 @@ def compute_overlap_areas(company_a: dict, company_b: dict) -> List[str]:
         b_matches = sum(1 for kw in keywords if kw in b_text)
         if a_matches > 0 and b_matches > 0:
             areas.append(industry)
-    if company_a.get("industry") and company_b.get("industry"):
-        if company_a["industry"].lower() == company_b["industry"].lower():
-            areas.append(company_a["industry"])
+    if (
+        company_a.get("industry")
+        and company_b.get("industry")
+        and company_a["industry"].lower() == company_b["industry"].lower()
+    ):
+        areas.append(company_a["industry"])
     return list(set(areas))
 
 
-def build_competitor_map(window_days: int = 30, min_co_mentions: int = 2) -> Dict[str, Any]:
+def build_competitor_map(window_days: int = 30, min_co_mentions: int = 2) -> dict[str, Any]:
     conn = get_conn()
     cursor = conn.cursor()
 
     cursor.execute(
-        """
+        f"""
         SELECT id, data_json, detected_at FROM raw_signals
-        WHERE detected_at >= datetime('now', '-{} days')
+        WHERE detected_at >= datetime('now', '-{window_days} days')
         ORDER BY detected_at DESC
-        """.format(window_days)
+        """
     )
     signals = cursor.fetchall()
 
     co_mentions = defaultdict(int)
-    for sig_id, data_json, detected_at in signals:
+    for _sig_id, data_json, _detected_at in signals:
         try:
             data = json.loads(data_json or "{}")
         except json.JSONDecodeError:
@@ -101,26 +105,46 @@ def build_competitor_map(window_days: int = 30, min_co_mentions: int = 2) -> Dic
             cursor.execute(
                 """
                 INSERT INTO competitor_relationships
-                (company_id, competitor_id, relationship_type, overlap_areas, confidence, extracted_at)
+                (company_id, competitor_id, relationship_type, overlap_areas,
+                 confidence, extracted_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_id, competitor_id) DO UPDATE SET
-                    confidence = MAX(excluded.confidence, competitor_relationships.confidence),
+                    confidence = MAX(
+                        excluded.confidence, competitor_relationships.confidence
+                    ),
                     overlap_areas = excluded.overlap_areas,
                     extracted_at = excluded.extracted_at
                 """,
-                (a_id, b_id, relationship_type, json.dumps(overlap), confidence, datetime.now(timezone.utc).isoformat()),
+                (
+                    a_id,
+                    b_id,
+                    relationship_type,
+                    json.dumps(overlap),
+                    confidence,
+                    datetime.now(UTC).isoformat(),
+                ),
             )
             cursor.execute(
                 """
                 INSERT INTO competitor_relationships
-                (company_id, competitor_id, relationship_type, overlap_areas, confidence, extracted_at)
+                (company_id, competitor_id, relationship_type, overlap_areas,
+                 confidence, extracted_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(company_id, competitor_id) DO UPDATE SET
-                    confidence = MAX(excluded.confidence, competitor_relationships.confidence),
+                    confidence = MAX(
+                        excluded.confidence, competitor_relationships.confidence
+                    ),
                     overlap_areas = excluded.overlap_areas,
                     extracted_at = excluded.extracted_at
                 """,
-                (b_id, a_id, relationship_type, json.dumps(overlap), confidence, datetime.now(timezone.utc).isoformat()),
+                (
+                    b_id,
+                    a_id,
+                    relationship_type,
+                    json.dumps(overlap),
+                    confidence,
+                    datetime.now(UTC).isoformat(),
+                ),
             )
             inserted += 1
         except Exception as e:
@@ -128,11 +152,15 @@ def build_competitor_map(window_days: int = 30, min_co_mentions: int = 2) -> Dic
 
     conn.commit()
     conn.close()
-    logger.info("Built competitor map: %d relationships from %d co-mention pairs", inserted, len(co_mentions))
+    logger.info(
+        "Built competitor map: %d relationships from %d co-mention pairs",
+        inserted,
+        len(co_mentions),
+    )
     return {"relationships": inserted, "co_mention_pairs": len(co_mentions)}
 
 
-def run() -> Dict[str, Any]:
+def run() -> dict[str, Any]:
     return build_competitor_map()
 
 

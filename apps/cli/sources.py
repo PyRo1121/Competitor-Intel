@@ -2,7 +2,6 @@
 """Expanded RSS & Source Feed List for private company intelligence."""
 
 import logging
-from typing import Dict, List
 
 logger = logging.getLogger("sources")
 
@@ -135,7 +134,7 @@ AI_RESEARCH = {
     "OpenAI Research": "https://openai.com/research/rss.xml",
 }
 
-ALL_SOURCES: Dict[str, str] = {}
+ALL_SOURCES: dict[str, str] = {}
 ALL_SOURCES.update(TECH_NEWS)
 ALL_SOURCES.update(AI_NEWS)
 ALL_SOURCES.update(VC_NEWS)
@@ -235,15 +234,15 @@ X_MONITORING_QUERIES = [
 ]
 
 
-def get_sources() -> Dict[str, str]:
+def get_sources() -> dict[str, str]:
     return ALL_SOURCES
 
 
-def get_priority_sources() -> Dict[str, str]:
+def get_priority_sources() -> dict[str, str]:
     return COMPETITOR_INTEL_SOURCES
 
 
-def get_x_monitoring_queries() -> List[str]:
+def get_x_monitoring_queries() -> list[str]:
     return X_MONITORING_QUERIES
 
 

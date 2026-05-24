@@ -1,131 +1,121 @@
-# Competitor Intel Architecture
+# Competitor Intel — architecture
 
-> **Monorepo (May 2026):** Canonical root is `~/Documents/Competitor-Intel/`. Paths below use legacy names; map `collectors/` → `packages/py-collectors/`, `automation/` → `apps/worker/automation/`, `api/` → `apps/api/`.
+Canonical repo: `~/Documents/Competitor-Intel/`. Implementation plan: [ROADMAP.md](ROADMAP.md). Operations: [HANDBOOK.md](HANDBOOK.md).
 
-## Dual stack (May 2026)
+## Monorepo layout
 
-| Layer | Path | Storage | Status |
-|-------|------|---------|--------|
-| Operational | `collectors/`, `automation/` | SQLite `competitor_intel.db` | Production daily pipeline |
-| Enterprise | `src/competitor_intel/` | Same DB path via `CI_DB_PATH` | SQLAlchemy collectors; optional CLI |
+```
+Competitor-Intel/
+├── apps/
+│   ├── api/                 # Bun + Hono REST API (read-mostly)
+│   ├── dashboard/           # Svelte 5 + Vite
+│   ├── worker/              # daily_intel.py, frequent_intel.py, reports
+│   └── cli/                 # intel.py, run_intel.py
+├── packages/
+│   ├── py-core/             # db, utils, alerts, ci_paths
+│   ├── py-collectors/       # collectors/ (operational ingest)
+│   └── py-enterprise/       # SQLAlchemy package — frozen until Track 4 (ROADMAP P4-2)
+├── integrations/hermes/     # call_intel.sh — only Hermes entry
+├── scripts/                 # enrich export/apply, golden eval, Grok helpers
+├── infra/scripts/           # dedupe, migrations
+├── docs/                    # see docs/README.md
+├── data/                    # competitor_intel.db (gitignored)
+└── tests/
+```
 
-Daily production flow uses **Version A** (`automation/daily_intel.py`). Enterprise package is wired incrementally via `automation/enterprise_collect.py` → `python -m competitor_intel.cli collect -c rss`.
+### Toolchain
+
+| Stack | Tool |
+|-------|------|
+| Python | `uv sync` — workspace: py-core, py-collectors, py-enterprise |
+| API | Bun — `apps/api` |
+| Dashboard | Bun — `apps/dashboard` |
+
+```bash
+uv run python apps/worker/daily_intel.py
+uv run python apps/cli/run_intel.py
+cd apps/api && bun run dev
+cd apps/dashboard && bun run dev
+```
+
+Path resolution: `packages/py-core/ci_paths.py` (`CI_DB_PATH` overrides DB file).
+
+### Root symlinks (legacy subprocess paths)
+
+```
+collectors   → packages/py-collectors/collectors
+automation   → apps/worker/automation
+intel.py     → apps/cli/intel.py
+run_intel.py → apps/cli/run_intel.py
+```
+
+Remove symlinks when `collector_registry.py` uses only monorepo-native paths (ROADMAP X-13).
+
+## Dual stack
+
+| Layer | Path | Status |
+|-------|------|--------|
+| **Operational** | `packages/py-collectors`, `apps/worker` | Production daily pipeline |
+| **Enterprise** | `packages/py-enterprise` | Optional CLI; **not** in daily — do not wire without ROADMAP decision |
+
+**Canonical daily entry:** `apps/worker/daily_intel.py` only. Do **not** use `apps/worker/automation/daily_intel.py` (removed — was a stale duplicate).
 
 ## Data flow
 
 ```
-Sources (RSS, GitHub, SEC, …)
-  → raw_signals (dedup: UNIQUE source + signal_type)
-  → signal_processor_v2 → intelligence_events
-  → enrichment / alerts / briefs
+Sources (RSS, GitHub, SEC, X via Grok, jobs, …)
+  → raw_signals (dedup via insert_raw_signal_dedup)
+  → signal_processor → intelligence_events
+  → rollups (funding_rounds, job_postings, profile claims)
+  → API + dashboard
 ```
 
-`signal_type` is typically a URL hash (`url_dedup_key`). Human-readable categories live in `data_json` (`kind`, `category`, `channel_company`).
+Layer rules and defect backlog: [PIPELINE.md](PIPELINE.md), [ROADMAP.md](ROADMAP.md).
+
+`signal_type` is usually a URL hash. Categories live in `data_json` (`kind`, `category`, `channel_company`).
 
 ## Parallel collection
 
-Independent collectors run in `automation/parallel_collect.py` (thread pool, max 6 workers) after `run_intel.py`. Processor and enrichment stay sequential.
+Independent collectors: `apps/worker/automation/parallel_collect.py` (thread pool). Processor, rollups, and enrichment stay sequential after ingest.
 
 ## HTTP layer
 
-Shared sync `httpx.Client` with connection pooling: `utils/http.py`. High-traffic collectors (RSS, multi-source, GitHub) use this instead of `requests`.
-
-## Migration path (enterprise)
-
-1. Run operational collectors until parity on ingest metrics.
-2. Point enterprise `CI_DB_PATH` at the same SQLite file as `db/connection.DB_PATH`.
-3. Enable one collector via `enterprise_collect.py` / CLI; compare row counts.
-4. Port remaining sources to `src/competitor_intel/collectors/` behind `PipelineRunner`.
-5. Retire duplicate scripts in `collectors/` per source.
+Shared sync `httpx.Client`: `packages/py-core/utils/http.py`. RSS, multi-source, and GitHub collectors use this pool.
 
 ## Ingest API
 
 Prefer `db/ingest.insert_raw_signal_dedup()` for all new signals. Use `dedup_key=` for scoped keys (e.g. RSS per-company rows).
 
-## Data source catalog
+## Feed catalog
 
-Canonical feed list: `collectors/sources_registry.py` (`FeedSource` records with `enabled`, `trust_tier`, `category`).
+Canonical list: `packages/py-collectors/collectors/sources_registry.py` (`FeedSource`: `enabled`, `trust_tier`, `category`).
 
-| Category | Enabled feeds | Examples |
-|----------|---------------|----------|
-| news | 13 | TechCrunch, VentureBeat, The Verge, Tech.eu |
-| ai | 5 | OpenAI, DeepMind, Google AI, Hugging Face |
-| vc | 2 | Lightspeed, Y Combinator Blog |
-| funding | 1 | Crunchbase News |
-| community | 3 | Hacker News, HN Show, HN high-signal |
-| products | 1 | Product Hunt |
-| newsletter | 3 | Stratechery, Lenny's, Elad Gil |
-| regulatory | 1 | EU Digital Strategy |
-| sec | 1 | SEC current filings Atom |
+Collectors wired to registry: `rss_collector.py`, `multi_source_collector.py`. Others use `utils.http` + dedup ingest.
 
-Disabled entries in the registry document broken URLs (e.g. Sequoia `/blog/rss/` 404, a16z feed 404) — do not re-enable without HTTP verification.
+## Stack choices (summary)
 
-Collectors wired to the registry: `rss_collector.py`, `multi_source_collector.py`. Other collectors use `utils.http` + `insert_raw_signal_dedup`.
+Full rationale: [ROADMAP.md § Stack decisions](ROADMAP.md#stack-decisions-r01--opinionated).
 
-## X and Grok
+| Layer | Choice | Notes |
+|-------|--------|-------|
+| Read API | Bun + Hono + `bun:sqlite` | Read-only in prod until P0-1 |
+| Collectors | Python httpx / feedparser | ~74 modules; I/O-bound |
+| Dashboard | SvelteKit 2 + Svelte 5 | Expand TanStack Query |
+| Embeddings | Ollama `nomic-embed-text` | Fix zero-vector on failure (Track 0) |
+| Search (target) | FTS5 + sqlite-vec in API | Remove Python subprocess (Track 2) |
+| Database | SQLite WAL | Single-file production store ([SQLITE.md](SQLITE.md)) |
 
-X/Twitter is **not** scraped via REST from this host. **Grok 4.3** (Hermes agent) runs native X search; Python collectors only persist structured JSON.
+**Defer:** Rust collectors, FastAPI rewrite, React/Next.js, merging enterprise stack into daily.
 
-### Flow
+## Hermes & X
 
-```
-Hermes/Grok agent
-  ├─ Per-company: x_monitor.get_x_query_prompt("@handle", days=2)
-  ├─ Discovery: sources_registry.X_MONITOR_QUERIES (8 templates)
-  └─ Returns JSON post arrays
-        │
-        ├─ x_monitor.process_grok_x_results(company, posts)
-        │     ├─ db/ingest.insert_x_post → x_posts (tracked companies only)
-        │     └─ x_signal_collector.store_x_signal → raw_signals (dedup)
-        │
-        ├─ x_monitor.process_grok_query_results(query, posts)
-        │     └─ x_signal_collector.store_grok_batch
-        │
-        └─ Batch file (optional): GROK_X_RESULTS_PATH → x_signal_collector.run()
-              └─ signal_processor_v2 → intelligence_events
-```
+X is **not** scraped via REST here. Grok (Hermes) runs native X search; Python persists JSON only.
 
-### Environment variables
+- Operator commands: [integrations/hermes/README.md](../integrations/hermes/README.md)
+- Technical model: [architecture/HERMES_INTEGRATION.md](architecture/HERMES_INTEGRATION.md)
 
-| Variable | Required | Purpose |
-|----------|----------|---------|
-| `GROK_X_RESULTS_PATH` | No | Path to JSON batch file for unattended ingest via `x_signal_collector.run()`. Format: `[{"query": "...", "results": [{...}]}]` or `{"batches": [...]}`. |
+## Related
 
-No API keys for X are stored in this repo — Grok access is external to the collector process.
-
-### Grok post JSON schema
-
-Each post object should include:
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `post_id` | string | Preferred dedup key → `signal_type` = `x_post:{id}` |
-| `text` | string | Full post body |
-| `url` | string | Canonical X URL |
-| `posted_at` | ISO datetime | Optional |
-| `likes`, `retweets`, `replies` | number | Engagement |
-| `is_founder_post` | bool | Optional |
-| `sentiment` | float | -1..1, optional |
-| `companies` / `companies_detected` | list | Grok hints; merged with DB extraction |
-
-### Company linking (`x_signal_collector`)
-
-On ingest, `companies_detected` is built from:
-
-1. Grok-provided company names
-2. `@mention` → `companies.x_handle` lookup (author included)
-3. Substring match against all `companies.name` / slug / handle via `rss_collector.extract_company_mentions`
-
-`company_id` is set when an explicit company is passed (per-handle ingest) or the first resolved name matches the DB. Category is inferred (`funding`, `product_launch`, `hiring`, `acquisition`, `social_momentum`) unless Grok sets `category`.
-
-### Dedup and payload
-
-- `source` = `x`
-- `signal_type` = `x_post:{post_id}` or URL hash (`url_dedup_key`)
-- `data_json` includes: `query`, `text`, `author`, engagement counts, `mentions`, `urls`, `companies_detected`, `grok_companies`, `category`, `kind`, `channel` (`grok_x_search`)
-
-### Modules
-
-1. `collectors/x_monitor.py` — prompts, `process_grok_x_results()`, `process_grok_query_results()`
-2. `collectors/x_signal_collector.py` — `store_x_signal()`, `store_grok_batch()`, `run()` / `GROK_X_RESULTS_PATH`
-3. `collectors/sources_registry.py` — `X_MONITOR_QUERIES` templates for parallel discovery
+- [docs/README.md](README.md) — documentation index
+- [PIPELINE.md](PIPELINE.md) — layers and commands
+- [ROADMAP.md](ROADMAP.md) — build plan

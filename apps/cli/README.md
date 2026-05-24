@@ -1,18 +1,13 @@
-# CLI app
-
-Operational command-line scripts migrated from the Hermes agent root.
+# CLI
 
 | Script | Role |
 |--------|------|
-| `intel.py` | Interactive intel queries |
+| `intel.py` | On-demand collectors, reports, search |
 | `run_intel.py` | Signal processor driver |
-| `query.py` | DB queries |
-| `sources.py` | Source registry helpers |
-| `retrieval.py` | RAG retrieval |
-
-Install enterprise CLI via root package:
 
 ```bash
-pip install -e .
-competitor-intel --help
+uv run python apps/cli/intel.py status
+uv run python apps/cli/run_intel.py
 ```
+
+Docs: [docs/HANDBOOK.md](../../docs/HANDBOOK.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md)

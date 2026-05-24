@@ -6,7 +6,7 @@ Moves high-scoring candidates from company_candidates into the main companies ta
 import logging
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from db.connection import get_conn
 
@@ -37,7 +37,7 @@ def auto_promote_candidates() -> int:
 
     candidates = cursor.fetchall()
     promoted = 0
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     for cand_id, name, description, score, source in candidates:
         slug = _slugify(name)

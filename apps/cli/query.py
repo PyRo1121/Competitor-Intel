@@ -1,39 +1,61 @@
 """
-Simple Query Interface for Competitor Intelligence RAG
+Semantic query CLI — uses enrichment reranker (Ollama embeddings).
+
 Usage:
-    python query.py "companies like Cursor"
-    python query.py "recent large AI funding rounds"
+    uv run python apps/cli/query.py "EU neobank funding"
 """
+
+from __future__ import annotations
 
 import logging
 import sys
-from retrieval import search_companies, search_funding_events, search_all
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "packages" / "py-collectors"))
+sys.path.insert(0, str(ROOT / "packages" / "py-core"))
+
+from collectors.enrichment.reranker import unified_search  # noqa: E402
 
 logger = logging.getLogger("query")
 
-def main():
-    """Main entry point for querying the competitor intelligence database."""
+
+def main() -> None:
     if len(sys.argv) < 2:
-        logger.info("Usage: python query.py \"your search query\"")
-        logger.info("Example: python query.py \"companies like Cursor that raised funding\"")
+        logger.info('Usage: uv run python apps/cli/query.py "your search query"')
         return
 
     query = " ".join(sys.argv[1:])
     logger.info("\nQuery: %s\n", query)
 
-    results = search_all(query, top_k=8)
+    results = unified_search(query, top_k=8)
 
     logger.info("=== Top Companies ===")
-    for i, c in enumerate(results["companies"], 1):
-        logger.info("%s. %s (score: %.3f)", i, c['name'], c['score'])
+    for i, c in enumerate(results.get("companies", []), 1):
+        logger.info("%s. %s (score: %.3f)", i, c["name"], c["score"])
 
-    logger.info("\n=== Relevant Funding Events ===")
-    if results["funding_events"]:
-        for i, f in enumerate(results["funding_events"], 1):
-            lead = f" (led by {f['lead']})" if f['lead'] else ""
-            logger.info("%s. %s — %s $%s%s", i, f['company'], f['round'], f['amount'], lead)
-    else:
-        logger.info("No relevant funding events found.")
+    logger.info("\n=== Funding Rounds ===")
+    for i, f in enumerate(results.get("funding", []), 1):
+        lead = f" (led by {f.get('lead')})" if f.get("lead") else ""
+        logger.info(
+            "%s. %s — %s $%s%s",
+            i,
+            f.get("company", "?"),
+            f.get("round", "?"),
+            f.get("amount", "?"),
+            lead,
+        )
+
+    logger.info("\n=== Intelligence Events ===")
+    for i, e in enumerate(results.get("events", []), 1):
+        logger.info(
+            "%s. %s | %s (score: %.3f)",
+            i,
+            e.get("company", "?"),
+            e.get("event_type", "?"),
+            e.get("score", 0.0),
+        )
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")

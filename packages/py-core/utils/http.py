@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -14,7 +14,7 @@ DEFAULT_HEADERS = {
 MAX_RETRIES = 3
 BACKOFF = 2
 
-_client: Optional[httpx.Client] = None
+_client: httpx.Client | None = None
 
 
 def get_http_client() -> httpx.Client:
@@ -39,9 +39,9 @@ def close_http_client() -> None:
 def safe_request(
     url: str,
     timeout: float = 20.0,
-    headers: Optional[dict] = None,
-    params: Optional[dict] = None,
-) -> Optional[httpx.Response]:
+    headers: dict | None = None,
+    params: dict | None = None,
+) -> httpx.Response | None:
     client = get_http_client()
     merged = {**DEFAULT_HEADERS, **(headers or {})}
     for attempt in range(MAX_RETRIES):
@@ -63,7 +63,7 @@ def safe_request(
     return None
 
 
-def fetch_text(url: str, timeout: float = 20.0) -> Optional[str]:
+def fetch_text(url: str, timeout: float = 20.0) -> str | None:
     resp = safe_request(url, timeout=timeout)
     if resp is None:
         return None
@@ -74,8 +74,8 @@ def post_json(
     url: str,
     payload: dict[str, Any],
     timeout: float = 60.0,
-    headers: Optional[dict] = None,
-) -> Optional[dict[str, Any]]:
+    headers: dict | None = None,
+) -> dict[str, Any] | None:
     """POST JSON body; return parsed response dict or None on failure."""
     client = get_http_client()
     merged = {**DEFAULT_HEADERS, "Accept": "application/json", **(headers or {})}

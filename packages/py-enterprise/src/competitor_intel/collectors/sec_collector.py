@@ -1,6 +1,6 @@
 """SEC EDGAR Form D collector for funding disclosures."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -13,15 +13,15 @@ logger = structlog.get_logger()
 
 class SECCollector(BaseCollector):
     """Collect SEC EDGAR Form D filings.
-    
+
     Form D is filed by companies that have sold securities in a Regulation D
     offering. This is a strong signal of recent funding.
-    
+
     Rate limit: 10 requests/second (SEC requirement)
     """
-    
+
     API_BASE = "https://data.sec.gov/submissions"
-    
+
     # Known AI/tech company CIKs
     CIKS = [
         "0001874178",  # Anthropic
@@ -35,23 +35,23 @@ class SECCollector(BaseCollector):
         "0001900768",  # Stability AI
         "0001901234",  # Cohere
     ]
-    
+
     def __init__(self):
         super().__init__("sec_edgar")
-    
+
     @property
     def source_type(self) -> str:
         return "sec_edgar"
-    
+
     @property
     def timeout(self) -> int:
         return 12
-    
+
     async def collect(self) -> list[dict[str, Any]]:
         """Collect recent Form D filings."""
         signals = []
         cutoff_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        
+
         for cik in self.CIKS:
             try:
                 filing = await self._fetch_filing(cik)
@@ -59,26 +59,26 @@ class SECCollector(BaseCollector):
                     signals.append(filing)
             except Exception as e:
                 logger.warning("sec_fetch_error", cik=cik, error=str(e))
-        
+
         logger.info("sec_collection_complete", total_signals=len(signals))
         return signals
-    
+
     async def _fetch_filing(self, cik: str) -> dict[str, Any] | None:
         """Fetch recent filings for a CIK."""
         url = f"{self.API_BASE}/CIK{cik.zfill(10)}.json"
-        
+
         headers = {
             "User-Agent": self.settings.rate_limit.sec_user_agent,
         }
-        
+
         response = await self.fetch(url, headers=headers)
         data = response.json()
-        
+
         filings = data.get("filings", {}).get("recent", {})
         forms = filings.get("form", [])
         dates = filings.get("filingDate", [])
         accessions = filings.get("accessionNumber", [])
-        
+
         # Find most recent Form D
         for i, form in enumerate(forms):
             if form in ("D", "D/A"):
@@ -88,7 +88,7 @@ class SECCollector(BaseCollector):
                     "url": f"https://www.sec.gov/Archives/edgar/data/{cik}/{accessions[i]}",
                     "source": "sec_edgar",
                     "signal_type": SignalType.SEC_FILING.value,
-                    "detected_at": datetime.utcnow().isoformat(),
+                    "detected_at": datetime.now(UTC).isoformat(),
                     "metadata": {
                         "cik": cik,
                         "form": form,
@@ -96,5 +96,5 @@ class SECCollector(BaseCollector):
                         "accession": accessions[i],
                     },
                 }
-        
+
         return None

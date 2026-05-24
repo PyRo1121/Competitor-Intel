@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""High-frequency ingest wrapper — RSS, X batch, website monitor."""
+"""Legacy lightweight ingest — RSS + website only. Prefer frequent_intel.py."""
 
 import logging
 import sys

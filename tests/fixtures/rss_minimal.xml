@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>CI Test Feed</title>
+    <item>
+      <title>AcmeCorp raises $5M seed round</title>
+      <link>https://example.com/acme-seed</link>
+      <description>AcmeCorp announced a seed round led by Example VC.</description>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

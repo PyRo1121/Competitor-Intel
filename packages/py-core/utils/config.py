@@ -1,11 +1,9 @@
 """Centralized configuration management."""
 
 import os
-from pathlib import Path
 from typing import Any
 
 import yaml
-
 from ci_paths import CONFIG_DIR, db_path
 
 

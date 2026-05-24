@@ -5,17 +5,19 @@ import html
 import json
 import logging
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+import sqlite3
+from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import urlparse
+
+from db.connection import get_conn
+from db.ingest import insert_raw_signal_dedup
+from utils.http import close_http_client, safe_request
 
 from collectors.company_match import resolve_company_id as match_company_id
 from collectors.entity_extract import extract_entities_from_text, text_has_hype
 from collectors.rss_collector import extract_company_mentions, load_company_names
 from collectors.signal_company_resolver import build_domain_index, resolve_from_url
-from db.connection import get_conn
-from db.ingest import insert_raw_signal_dedup
-from utils.http import close_http_client, safe_request
 
 logger = logging.getLogger("hackernews")
 
@@ -28,7 +30,7 @@ COMMENT_FETCH_LIMIT = 6
 THREAD_COMMENT_MAX = 500
 
 
-def fetch_story_ids(endpoint: str, limit: int = 50) -> List[int]:
+def fetch_story_ids(endpoint: str, limit: int = 50) -> list[int]:
     resp = safe_request(endpoint, timeout=15.0)
     if resp is None:
         return []
@@ -40,7 +42,7 @@ def fetch_story_ids(endpoint: str, limit: int = 50) -> List[int]:
         return []
 
 
-def fetch_story(story_id: int) -> Dict[str, Any]:
+def fetch_story(story_id: int) -> dict[str, Any]:
     resp = safe_request(f"{HN_API}/item/{story_id}.json", timeout=10.0)
     if resp is None:
         return {}
@@ -56,10 +58,10 @@ def _strip_html(text: str) -> str:
     return html.unescape(cleaned).strip()
 
 
-def fetch_thread_comments(story: Dict[str, Any], limit: int = COMMENT_FETCH_LIMIT) -> List[str]:
+def fetch_thread_comments(story: dict[str, Any], limit: int = COMMENT_FETCH_LIMIT) -> list[str]:
     """Top-level HN comments — often name investors, terms, or link to press."""
     kids = story.get("kids") or []
-    comments: List[str] = []
+    comments: list[str] = []
     for kid in kids[:limit]:
         item = fetch_story(int(kid))
         if not item or item.get("type") != "comment":
@@ -70,25 +72,43 @@ def fetch_thread_comments(story: Dict[str, Any], limit: int = COMMENT_FETCH_LIMI
     return comments
 
 
-def is_startup_relevant(story: Dict[str, Any]) -> bool:
+def is_startup_relevant(story: dict[str, Any]) -> bool:
     if not story:
         return False
     title = (story.get("title") or "").lower()
     text = _strip_html(str(story.get("text") or "")).lower()
     combined = f"{title} {text}"
     keywords = [
-        "launch", "show hn", "startup", "funding", "raised",
-        "series a", "series b", "seed", "acquired", "open source",
-        "github", "api", "saas", "developer tools",
-        "led by", "million", "valuation", "round", "hiring",
-        "platform", "marketplace", "fintech", "health",
+        "launch",
+        "show hn",
+        "startup",
+        "funding",
+        "raised",
+        "series a",
+        "series b",
+        "seed",
+        "acquired",
+        "open source",
+        "github",
+        "api",
+        "saas",
+        "developer tools",
+        "led by",
+        "million",
+        "valuation",
+        "round",
+        "hiring",
+        "platform",
+        "marketplace",
+        "fintech",
+        "health",
     ]
     if any(kw in combined for kw in keywords):
         return True
     return text_has_hype(combined)
 
 
-def classify_story_type(story: Dict[str, Any]) -> str:
+def classify_story_type(story: dict[str, Any]) -> str:
     title = (story.get("title") or "").lower()
     if title.startswith("show hn"):
         return "show_hn"
@@ -107,10 +127,10 @@ def classify_story_type(story: Dict[str, Any]) -> str:
 
 def _resolve_first_company_id(
     cursor: sqlite3.Cursor,
-    names: List[str],
+    names: list[str],
     *,
-    domain_index: Optional[Dict] = None,
-) -> Optional[int]:
+    domain_index: dict | None = None,
+) -> int | None:
     for name in names:
         cid = match_company_id(cursor, name, domain_index=domain_index)
         if cid is not None:
@@ -118,11 +138,11 @@ def _resolve_first_company_id(
     return None
 
 
-def store_signals(stories: List[Dict[str, Any]], company_names: List[str]) -> int:
+def store_signals(stories: list[dict[str, Any]], company_names: list[str]) -> int:
     conn = get_conn()
     cursor = conn.cursor()
     stored = 0
-    detected_at = datetime.now(timezone.utc).isoformat()
+    detected_at = datetime.now(UTC).isoformat()
 
     for story in stories:
         title = story.get("title", "")
@@ -136,7 +156,7 @@ def store_signals(stories: List[Dict[str, Any]], company_names: List[str]) -> in
         external = story.get("url")
         discussion = f"https://news.ycombinator.com/item?id={story['id']}"
         url = external or discussion
-        outbound: List[str] = []
+        outbound: list[str] = []
         if external:
             outbound.append(external)
         outbound.append(discussion)
@@ -177,14 +197,14 @@ def store_signals(stories: List[Dict[str, Any]], company_names: List[str]) -> in
     return stored
 
 
-def enrich_stories_with_threads(stories: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def enrich_stories_with_threads(stories: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for story in stories:
         if (story.get("descendants") or 0) >= 3:
             story["thread_comments"] = fetch_thread_comments(story)
     return stories
 
 
-def _story_domain(url: Optional[str]) -> str:
+def _story_domain(url: str | None) -> str:
     if not url:
         return ""
     try:
@@ -193,15 +213,15 @@ def _story_domain(url: Optional[str]) -> str:
         return ""
 
 
-def store_algolia_show_hn(cursor, company_names: List[str], pages: int = 12) -> int:
+def store_algolia_show_hn(cursor, company_names: list[str], pages: int = 12) -> int:
     """Historical Show HN via Algolia (no API key)."""
     domain_index = build_domain_index(cursor)
-    detected_at = datetime.now(timezone.utc).isoformat()
+    detected_at = datetime.now(UTC).isoformat()
     stored = 0
-    timestamp: Optional[int] = None
+    timestamp: int | None = None
 
     for _ in range(pages):
-        params: Dict[str, Any] = {"tags": "show_hn", "hitsPerPage": 100}
+        params: dict[str, Any] = {"tags": "show_hn", "hitsPerPage": 100}
         if timestamp is not None:
             params["numericFilters"] = f"created_at_i<{timestamp}"
         resp = safe_request(HN_ALGOLIA, timeout=25.0, params=params)
@@ -229,9 +249,7 @@ def store_algolia_show_hn(cursor, company_names: List[str], pages: int = 12) -> 
                 if match:
                     company_id = int(match[0])
             if company_id is None and companies:
-                company_id = match_company_id(
-                    cursor, companies[0], domain_index=domain_index
-                )
+                company_id = match_company_id(cursor, companies[0], domain_index=domain_index)
             object_id = str(hit.get("objectID") or "")
             data = {
                 "title": title,

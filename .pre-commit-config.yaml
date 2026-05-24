@@ -1,0 +1,10 @@
+# Track 3 — optional local hooks (bare metal; no Docker).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.13
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(packages|apps/worker|apps/cli|tests|scripts)/
+      - id: ruff-format
+        files: ^(packages|apps/worker|apps/cli|tests|scripts)/

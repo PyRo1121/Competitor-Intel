@@ -6,8 +6,9 @@
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir ./dist --target bun",
-    "lint": "eslint src/",
-    "format": "prettier --write src/"
+    "lint": "cd ../.. && bun run lint:js",
+    "format": "cd ../.. && bun run fmt",
+    "test": "bun test"
   },
   "dependencies": {
     "@hono/zod-validator": "^0.8.0",

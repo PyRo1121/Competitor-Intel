@@ -4,10 +4,9 @@ TechCrunch funding signal collector — HTML scrape for funding headlines.
 
 import logging
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 from bs4 import BeautifulSoup
-
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup, url_dedup_key
 from utils.http import fetch_text
@@ -15,9 +14,19 @@ from utils.http import fetch_text
 logger = logging.getLogger("techcrunch_edgar")
 
 FUNDING_KEYWORDS = [
-    "raised", "funding", "seed round", "series a", "series b",
-    "valuation", "acquires", "acquisition", "invests", "investors",
-    "million", "billion", "startup funding",
+    "raised",
+    "funding",
+    "seed round",
+    "series a",
+    "series b",
+    "valuation",
+    "acquires",
+    "acquisition",
+    "invests",
+    "investors",
+    "million",
+    "billion",
+    "startup funding",
 ]
 
 SCRAPE_URLS = [
@@ -27,9 +36,9 @@ SCRAPE_URLS = [
 ]
 
 
-def fetch_techcrunch_funding_news() -> List[Dict[str, Any]]:
+def fetch_techcrunch_funding_news() -> list[dict[str, Any]]:
     logger.info("Fetching TechCrunch funding headlines...")
-    signals: List[Dict[str, Any]] = []
+    signals: list[dict[str, Any]] = []
     seen_titles: set[str] = set()
 
     for page_url in SCRAPE_URLS:
@@ -65,7 +74,7 @@ def fetch_techcrunch_funding_news() -> List[Dict[str, Any]]:
     return signals
 
 
-def store_signals(signals: List[Dict[str, Any]]) -> int:
+def store_signals(signals: list[dict[str, Any]]) -> int:
     if not signals:
         return 0
 

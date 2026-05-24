@@ -68,9 +68,7 @@ def ensure_dedup_index(conn: sqlite3.Connection) -> bool:
         logger.info("Index %s already exists", INDEX_NAME)
         return True
     try:
-        conn.execute(
-            f"CREATE UNIQUE INDEX {INDEX_NAME} ON raw_signals(source, signal_type)"
-        )
+        conn.execute(f"CREATE UNIQUE INDEX {INDEX_NAME} ON raw_signals(source, signal_type)")
         conn.commit()
         logger.info("Created unique index %s", INDEX_NAME)
         return True
@@ -109,8 +107,13 @@ def main() -> int:
     total = cursor.fetchone()[0]
     dup_groups = count_duplicate_groups(cursor)
     to_delete = count_rows_to_delete(cursor)
-    logger.info("DB: %s (%s raw_signals, %s duplicate groups, %s rows to delete)",
-                DB_PATH, total, dup_groups, to_delete)
+    logger.info(
+        "DB: %s (%s raw_signals, %s duplicate groups, %s rows to delete)",
+        DB_PATH,
+        total,
+        dup_groups,
+        to_delete,
+    )
 
     if args.dry_run:
         conn.close()

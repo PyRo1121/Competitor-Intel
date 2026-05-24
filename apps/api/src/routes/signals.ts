@@ -37,7 +37,9 @@ app.get("/", zValidator("query", signalQuery), (c) => {
     ...row,
     signal_label: signalLabelFromRow(row.signal_type, row.data_json),
   }));
-  const { count } = db.prepare(`SELECT COUNT(*) as count FROM raw_signals`).get() as { count: number };
+  const { count } = db.prepare(`SELECT COUNT(*) as count FROM raw_signals`).get() as {
+    count: number;
+  };
 
   return c.json({ signals, count, limit, offset });
 });

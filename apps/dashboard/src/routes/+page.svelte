@@ -10,7 +10,7 @@
 
 	let status = $state<StatusResponse | null>(null);
 	let loadError = $state<string | null>(null);
-	let phaseB = $state<{ rounds: number; claims: number; activeJobs: number } | null>(null);
+	let rollupSummary = $state<{ rounds: number; claims: number; activeJobs: number } | null>(null);
 	let topAttention = $state<{ name: string; score: number; slug?: string | null }[]>([]);
 
 	onMount(async () => {
@@ -23,7 +23,7 @@
 			]);
 			status = statusRes;
 			if (fundingRes?.stats) {
-				phaseB = {
+				rollupSummary = {
 					rounds: fundingRes.stats.total_rounds ?? 0,
 					claims: fundingRes.stats.total_claims ?? 0,
 					activeJobs: jobsRes?.stats?.active_postings ?? jobsRes?.count ?? 0,
@@ -78,16 +78,16 @@
 			<IntelHealthCard {status} apiReachable={!loadError} />
 		</div>
 
-		{#if phaseB}
-			<div class="mb-8 grid gap-3 sm:grid-cols-2" aria-label="Phase B intelligence corpus">
+		{#if rollupSummary}
+			<div class="mb-8 grid gap-3 sm:grid-cols-2" aria-label="Structured intelligence corpus">
 				<a href="/funding" class="ci-panel group flex items-center justify-between p-4 transition-colors hover:border-[var(--color-accent)]/40">
 					<div>
 						<p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Funding</p>
 						<p class="ci-display mt-1 text-2xl font-medium tabular-nums text-[var(--color-ink)]">
-							{phaseB.rounds}
+							{rollupSummary.rounds}
 							<span class="text-base font-normal text-[var(--color-ink-muted)]">rounds</span>
 						</p>
-						<p class="mt-0.5 text-xs text-[var(--color-ink-faint)]">{phaseB.claims} source claims</p>
+						<p class="mt-0.5 text-xs text-[var(--color-ink-faint)]">{rollupSummary.claims} source claims</p>
 					</div>
 					<ArrowRight size={18} class="text-[var(--color-ink-faint)] group-hover:text-[var(--color-accent)]" />
 				</a>
@@ -95,7 +95,7 @@
 					<div>
 						<p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">Jobs</p>
 						<p class="ci-display mt-1 text-2xl font-medium tabular-nums text-[var(--color-ink)]">
-							{phaseB.activeJobs}
+							{rollupSummary.activeJobs}
 							<span class="text-base font-normal text-[var(--color-ink-muted)]">active</span>
 						</p>
 						<p class="mt-0.5 text-xs text-[var(--color-ink-faint)]">Canonical postings</p>
@@ -106,18 +106,21 @@
 		{/if}
 
 		{#if topAttention.length > 0}
-			<a
-				href="/discovery"
-				class="ci-panel group mb-8 block p-4 transition-colors hover:border-[var(--color-accent)]/40"
-			>
+			<section class="ci-panel group mb-8 p-4">
 				<div class="mb-3 flex items-center justify-between">
-					<p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)]">
+					<a
+						href="/discovery"
+						class="text-xs font-semibold uppercase tracking-wider text-[var(--color-ink-faint)] hover:text-[var(--color-accent)]"
+					>
 						Top attention (30d)
-					</p>
-					<ArrowRight
-						size={18}
-						class="text-[var(--color-ink-faint)] group-hover:text-[var(--color-accent)]"
-					/>
+					</a>
+					<a
+						href="/discovery"
+						class="text-[var(--color-ink-faint)] hover:text-[var(--color-accent)]"
+						aria-label="View discovery"
+					>
+						<ArrowRight size={18} />
+					</a>
 				</div>
 				<ol class="grid gap-2 sm:grid-cols-5">
 					{#each topAttention as row, i}
@@ -134,7 +137,7 @@
 						</li>
 					{/each}
 				</ol>
-			</a>
+			</section>
 		{/if}
 
 		<div class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

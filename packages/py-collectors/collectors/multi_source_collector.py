@@ -5,24 +5,23 @@ Curated list of premium free sources for competitor intelligence.
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
-from typing import Tuple
 
 import feedparser
 
 logger = logging.getLogger("multi_source_collector")
 
-from collectors.sources_registry import catalog_summary, multi_source_tuples
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
 from utils.http import close_http_client, fetch_text
+
+from collectors.sources_registry import catalog_summary, multi_source_tuples
 
 SOURCES = multi_source_tuples()
 
 FETCH_WORKERS = 6
 
 
-def collect_source(url: str, name: str) -> Tuple[str, int]:
+def collect_source(url: str, name: str) -> tuple[str, int]:
     added = 0
     body = fetch_text(url, timeout=25.0)
     if not body:

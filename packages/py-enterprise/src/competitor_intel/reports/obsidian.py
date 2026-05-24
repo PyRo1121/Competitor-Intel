@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import structlog
 from jinja2 import Template
@@ -47,76 +46,82 @@ _No funding events recorded._
 
 class ObsidianReporter:
     """Generate Obsidian-compatible Markdown notes.
-    
+
     Creates structured notes for each tracked company with:
     - Company overview
     - Funding history
     - Links to other companies
     - Proper Obsidian tags
     """
-    
+
     def __init__(self):
         self.settings = get_settings()
         self.template = Template(COMPANY_NOTE_TEMPLATE)
-    
+
     def generate_company_note(self, company_id: int) -> str | None:
         """Generate a note for a single company."""
         with get_session() as session:
             company = session.query(Company).get(company_id)
             if not company:
                 return None
-            
-            funding_events = session.query(FundingEvent).filter(
-                FundingEvent.company_id == company_id
-            ).order_by(FundingEvent.announced_date.desc()).all()
-        
+
+            funding_events = (
+                session.query(FundingEvent)
+                .filter(FundingEvent.company_id == company_id)
+                .order_by(FundingEvent.announced_date.desc())
+                .all()
+            )
+
         return self.template.render(
             company=company,
             funding_events=funding_events,
             now=datetime.now(),
         )
-    
+
     def generate_all_notes(self, limit: int = 50) -> list[Path]:
         """Generate notes for all tracked companies."""
         vault_dir = self.settings.obsidian_dir / "Companies"
         vault_dir.mkdir(parents=True, exist_ok=True)
-        
+
         with get_session() as session:
-            companies = session.query(Company).order_by(
-                Company.score.desc().nulls_last()
-            ).limit(limit).all()
-        
+            companies = (
+                session.query(Company)
+                .order_by(Company.score.desc().nulls_last())
+                .limit(limit)
+                .all()
+            )
+
         generated = []
         for company in companies:
             try:
                 note = self.generate_company_note(company.id)
                 if not note:
                     continue
-                
+
                 # Sanitize filename
                 safe_name = self._sanitize_filename(company.name)
                 filepath = vault_dir / f"{safe_name}.md"
-                
+
                 filepath.write_text(note, encoding="utf-8")
                 generated.append(filepath)
-                
+
                 logger.debug("obsidian_note_generated", company=company.name)
-                
+
             except Exception as e:
                 logger.error(
                     "obsidian_note_error",
                     company=company.name,
                     error=str(e),
                 )
-        
+
         logger.info("obsidian_generation_complete", count=len(generated))
         return generated
-    
+
     def generate_index(self) -> str:
         """Generate an index note linking all companies."""
         with get_session() as session:
             companies = session.query(Company).order_by(Company.name).all()
-        
+
         lines = [
             "# Competitor Intelligence Index",
             "",
@@ -126,14 +131,14 @@ class ObsidianReporter:
             "## All Companies",
             "",
         ]
-        
+
         for company in companies:
             safe_name = self._sanitize_filename(company.name)
             score_text = f" (Score: {company.score:.2f})" if company.score else ""
             lines.append(f"- [[{safe_name}]]{score_text}")
-        
+
         return "\n".join(lines)
-    
+
     @staticmethod
     def _sanitize_filename(name: str) -> str:
         """Sanitize company name for use as filename."""

@@ -2,11 +2,10 @@
 
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
-
 from alembic import context
 from competitor_intel.db.models import Base
 from competitor_intel.settings import get_settings
+from sqlalchemy import engine_from_config, pool
 
 settings = get_settings()
 
@@ -15,6 +14,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
 
 def get_url():
     return f"sqlite:///{settings.db.path}"
@@ -34,9 +34,9 @@ def run_migrations_offline():
 
 
 def run_migrations_online():
-    configuration = config.get_section(config.config_ini_section)
+    configuration = config.get_section(config.config_ini_section) or {}
     configuration["sqlalchemy.url"] = get_url()
-    
+
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",

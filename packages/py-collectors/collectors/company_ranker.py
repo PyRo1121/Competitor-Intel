@@ -11,18 +11,19 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
+
+from db.connection import get_conn
 
 from collectors.entity_extract import hype_keyword_hits
-from db.connection import get_conn
 
 logger = logging.getLogger("company_ranker")
 
 WINDOW_DAYS = 30
 
 
-def _signal_stats(cursor: sqlite3.Cursor, company_id: int) -> Dict[str, float]:
+def _signal_stats(cursor: sqlite3.Cursor, company_id: int) -> dict[str, float]:
     cursor.execute(
         f"""
         SELECT COUNT(*) FROM raw_signals
@@ -88,11 +89,7 @@ def _signal_stats(cursor: sqlite3.Cursor, company_id: int) -> Dict[str, float]:
     hype = min(hype_total / 8.0, 1.0)
 
     composite = (
-        volume * 0.30
-        + velocity * 0.30
-        + diversity * 0.15
-        + events_score * 0.15
-        + hype * 0.10
+        volume * 0.30 + velocity * 0.30 + diversity * 0.15 + events_score * 0.15 + hype * 0.10
     )
     return {
         "composite": round(min(composite, 1.0), 4),
@@ -105,13 +102,13 @@ def _signal_stats(cursor: sqlite3.Cursor, company_id: int) -> Dict[str, float]:
     }
 
 
-def rank_companies() -> Dict[str, Any]:
+def rank_companies() -> dict[str, Any]:
     conn = get_conn()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name FROM companies WHERE status = 'active' OR status IS NULL")
     rows = cursor.fetchall()
-    now = datetime.now(timezone.utc).isoformat()
-    ranked: List[Dict[str, Any]] = []
+    now = datetime.now(UTC).isoformat()
+    ranked: list[dict[str, Any]] = []
 
     for company_id, name in rows:
         stats = _signal_stats(cursor, company_id)

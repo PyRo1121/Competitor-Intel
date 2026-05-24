@@ -20,9 +20,7 @@ import logging
 import re
 import sqlite3
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
 import feedparser
@@ -56,11 +54,32 @@ CHANNEL_COMPANY_MAP = {
 }
 
 HIGH_SIGNAL_KEYWORDS = [
-    "funding", "raised", "series a", "series b", "series c", "seed round",
-    "valuation", "million", "billion", "invest", "acquire", "acquisition",
-    "launch", "new product", "announcement", "partnership", "collaboration",
-    "ipo", "public offering", "merger", "startup", "unicorn",
-    "ai model", "llm", "agent", "autonomous",
+    "funding",
+    "raised",
+    "series a",
+    "series b",
+    "series c",
+    "seed round",
+    "valuation",
+    "million",
+    "billion",
+    "invest",
+    "acquire",
+    "acquisition",
+    "launch",
+    "new product",
+    "announcement",
+    "partnership",
+    "collaboration",
+    "ipo",
+    "public offering",
+    "merger",
+    "startup",
+    "unicorn",
+    "ai model",
+    "llm",
+    "agent",
+    "autonomous",
 ]
 
 
@@ -91,7 +110,7 @@ def extract_video_id(entry: dict) -> str:
     return ""
 
 
-def normalize_entry(entry: dict, channel_id: str) -> Dict:
+def normalize_entry(entry: dict, channel_id: str) -> dict:
     """Build a consistent video entry dict for downstream storage."""
     video_id = extract_video_id(entry)
     link = entry.get("link") or (f"https://www.youtube.com/watch?v={video_id}" if video_id else "")
@@ -105,14 +124,18 @@ def normalize_entry(entry: dict, channel_id: str) -> Dict:
     }
 
 
-def fetch_channel_feed(channel_id: str) -> List[Dict]:
+def fetch_channel_feed(channel_id: str) -> list[dict]:
     """Fetch recent videos from a YouTube channel via RSS or fallback methods."""
     rss_url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
 
     try:
         feed = feedparser.parse(rss_url)
         if getattr(feed, "bozo", 0) and not feed.entries:
-            logger.warning("RSS parse issue for channel %s: %s", channel_id, getattr(feed, "bozo_exception", ""))
+            logger.warning(
+                "RSS parse issue for channel %s: %s",
+                channel_id,
+                getattr(feed, "bozo_exception", ""),
+            )
 
         entries = []
         for entry in feed.entries[:10]:
@@ -130,7 +153,7 @@ def fetch_channel_feed(channel_id: str) -> List[Dict]:
         return []
 
 
-def fetch_with_ytdlp(channel_id: str) -> List[Dict]:
+def fetch_with_ytdlp(channel_id: str) -> list[dict]:
     """Fetch videos using yt-dlp as fallback (no API key needed)."""
     try:
         import subprocess
@@ -196,7 +219,7 @@ def generate_video_hash(video_id: str, title: str) -> str:
 
 
 def store_youtube_signal(
-    entry: Dict,
+    entry: dict,
     channel_name: str,
     channel_id: str,
     score: float,
@@ -253,7 +276,7 @@ def store_youtube_signal(
         conn.close()
 
 
-def run_youtube_collection() -> Dict[str, int]:
+def run_youtube_collection() -> dict[str, int]:
     """Run YouTube collection for all configured channels."""
     logger.info("Starting YouTube channel monitor for %d channels", len(YOUTUBE_CHANNELS))
 

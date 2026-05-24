@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Big Deals & Rumors Collector
-Extracts high-value funding events and strategic partnerships from raw signals.
-Uses Ollama LLM via HTTP API when available (bare metal install).
-Falls back to keyword heuristics when LLM is unavailable.
+Extracts high-value funding events from raw signals using keyword/heuristic rules only.
+
+LLM extraction (Grok/Hermes) is NOT done here — use enrich queue or Grok X ingest.
+Ollama is reserved for embeddings/rerank elsewhere in this repo.
 """
 
 import hashlib
@@ -11,11 +12,16 @@ import json
 import logging
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 
 logger = logging.getLogger("big_deals")
 
-from db.connection import get_conn, DB_PATH
+from db.connection import get_conn
+
+from collectors.funding_parse import parse_amount_usd
+from collectors.pipeline_guard import (
+    strict_pipeline_blocks_funding_events,
+    strict_pipeline_blocks_legacy_events,
+)
 
 # Keywords indicating high-value or strategic deals
 BIG_DEAL_KEYWORDS = [
@@ -32,92 +38,50 @@ BIG_DEAL_KEYWORDS = [
 ]
 
 
-
-
-
 def generate_dedup_key(text: str) -> str:
     """Generate a short deduplication key from text."""
     return hashlib.sha256(text.lower().encode()).hexdigest()[:16]
 
 
-def try_llm_extract(text: str) -> dict | None:
-    """Attempt to extract structured data using local Ollama LLM via HTTP API."""
-    prompt = f"""Extract funding intelligence from this text as JSON:
+def keyword_extract(text: str) -> dict | None:
+    """Heuristic extraction only — no local LLM."""
+    lower = text.lower()
+    event_type = "Big Deal"
+    if "partnership" in lower or "strategic" in lower:
+        event_type = "Strategic Partnership"
+    elif "valuation" in lower:
+        event_type = "Valuation Update"
+    elif "rumor" in lower or "rumoured" in lower:
+        event_type = "Rumored Round"
+    elif "billion" in lower or "mega" in lower:
+        event_type = "Mega-Round"
 
-Text: "{text[:1000]}"
-
-Return ONLY valid JSON:
-{{
-  "event_type": "Strategic Partnership | Valuation Update | Rumored Round | Commercial Deal | Mega-Round",
-  "company_name": "exact name or null",
-  "amount_usd": number or null,
-  "valuation_usd": number or null,
-  "counterparty": "the other company or null",
-  "is_rumor": true/false,
-  "confidence": 0.0-1.0,
-  "summary": "one sentence summary"
-}}"""
-
-    # Try HTTP API first (bare metal Ollama)
-    try:
-        from ollama_client import generate
-
-        response = generate(prompt, model="qwen3.5:9b", temperature=0.1, num_predict=350)
-        if response:
-            data = json.loads(response)
-            if data.get("confidence", 0) >= 0.65:
-                return data
-    except (ImportError, json.JSONDecodeError, ValueError) as e:
-        logger.debug("HTTP LLM extraction failed: %s", e)
-
-    # Fallback to import-based Ollama if available
-    try:
-        import ollama  # type: ignore # noqa: F811
-        import re
-
-        response = ollama.chat(
-            model="qwen3.5:9b",
-            messages=[{"role": "user", "content": prompt}],
-            options={"temperature": 0.1, "num_predict": 350},
-        )
-        content = response["message"]["content"]
-        match = re.search(r"\{.*\}", content, re.DOTALL)
-        if match:
-            data = json.loads(match.group(0))
-            if data.get("confidence", 0) >= 0.65:
-                return data
-    except (ImportError, Exception):
-        pass
-
-    return None
+    amount = parse_amount_usd(text)
+    is_rumor = "rumor" in lower or "rumoured" in lower or "reportedly" in lower
+    confidence = 0.72 if amount else 0.65
+    return {
+        "event_type": event_type,
+        "company_name": None,
+        "amount_usd": amount,
+        "valuation_usd": amount if "valuation" in lower else None,
+        "counterparty": None,
+        "is_rumor": is_rumor,
+        "confidence": confidence,
+        "summary": text[:200],
+    }
 
 
 def create_event(event: dict) -> bool:
     """Insert a big deal event with deduplication."""
+    if strict_pipeline_blocks_funding_events("big_deals_collector"):
+        return False
     conn = get_conn()
     cursor = conn.cursor()
-
-    # Schema migration (idempotent)
-    for col, col_type in [
-        ("event_type", "TEXT"),
-        ("is_rumor", "TEXT"),
-        ("counterparty", "TEXT"),
-        ("confidence", "REAL"),
-    ]:
-        try:
-            cursor.execute(f"ALTER TABLE funding_events ADD COLUMN {col} {col_type}")
-        except sqlite3.OperationalError as e:
-            if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
-                pass
-            else:
-                logger.warning("Schema migration warning: %s", e)
 
     dedup_key = generate_dedup_key(str(event))
 
     try:
-        cursor.execute(
-            "SELECT 1 FROM funding_events WHERE source_url = ?", (dedup_key,)
-        )
+        cursor.execute("SELECT 1 FROM funding_events WHERE source_url = ?", (dedup_key,))
         if cursor.fetchone():
             return False
 
@@ -152,7 +116,9 @@ def create_event(event: dict) -> bool:
 
 
 def run() -> int:
-    """Run big deals and rumors collector using LLM + keyword heuristics."""
+    """Run big deals collector using keyword heuristics only."""
+    if strict_pipeline_blocks_legacy_events("big_deals_collector"):
+        return 0
     logger.info("Running Big Deals & Rumors Collector")
     conn = get_conn()
     cursor = conn.cursor()
@@ -169,14 +135,12 @@ def run() -> int:
     for row in rows:
         try:
             data = json.loads(row["data_json"])
-            text = " ".join(
-                str(data.get(k, "")) for k in ["title", "summary", "content"]
-            )
+            text = " ".join(str(data.get(k, "")) for k in ["title", "summary", "content"])
 
             if not any(kw.lower() in text.lower() for kw in BIG_DEAL_KEYWORDS):
                 continue
 
-            result = try_llm_extract(text)
+            result = keyword_extract(text)
             if not result:
                 continue
 
@@ -205,7 +169,7 @@ def run() -> int:
             if create_event(event):
                 created += 1
                 company = result.get("company_name", "Unknown")
-                logger.info("Created event: %s — %s", company, result['event_type'])
+                logger.info("Created event: %s — %s", company, result["event_type"])
 
         except (json.JSONDecodeError, KeyError, TypeError, sqlite3.Error) as e:
             logger.warning("Error processing signal: %s", e)

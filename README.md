@@ -1,88 +1,58 @@
 # Competitor Intelligence
 
-Standalone competitive intelligence platform: ingest RSS, GitHub, SEC, Product Hunt, and structured X signals; score companies; expose REST API and Svelte dashboard.
-
-## Toolchain
-
-| Stack | Tool | Notes |
-|-------|------|-------|
-| Python | [uv](https://docs.astral.sh/uv/) | Workspace with 3 packages under `packages/` |
-| API | [Bun](https://bun.sh/) | `apps/api` — Hono + TypeScript |
-| Dashboard | Bun | `apps/dashboard` — Svelte 5 + Vite |
+Private-company intelligence platform: ingest RSS, GitHub, SEC, jobs, and Grok/X signals; roll up funding and hiring claims; expose a REST API and Svelte dossier for due diligence.
 
 ## Quick start
 
 ```bash
 cd ~/Documents/Competitor-Intel
-
-# Python workspace (creates .venv + uv.lock)
 uv sync
-
-# Optional: copy existing DB from Hermes agent tree
-# cp ~/.hermes/agents/competitor_intel/competitor_intel.db data/
-
 export CI_DB_PATH="$PWD/data/competitor_intel.db"
 
-# Daily pipeline
-uv run python apps/worker/daily_intel.py
-
-# Signal processing / reports
-uv run python apps/cli/run_intel.py
-
-# Enterprise CLI
-uv run competitor-intel --help
-
-# API (port 3000)
-cd apps/api && bun install && bun run dev
-
-# Dashboard (port 5173)
-cd apps/dashboard && bun install && bun run dev
+make full-sweep         # on-demand: daily first, then enriched X search + ingest
+make daily              # scheduled full pipeline (X fetch only if batch stale)
+make intel-gate         # signal quality gate
+make api-dev            # API :3000
+make dashboard-dev      # UI :5173
 ```
 
-## Makefile shortcuts
+Hermes: `integrations/hermes/call_intel.sh daily` (see [integrations/hermes/README.md](integrations/hermes/README.md)).
 
-```bash
-make sync          # uv sync
-make daily         # daily_intel pipeline
-make api-dev       # bun API dev server
-make dashboard-dev # bun Vite dev server
-make compile       # python compileall via uv
-make test          # pytest via uv
-```
+## Toolchain
 
-## Database
+| Layer | Stack |
+|-------|--------|
+| Collectors / worker | Python 3.12+ via **uv** |
+| API | **Bun** + Hono |
+| Dashboard | **Bun** + Svelte 5 |
+| Database | SQLite (`data/competitor_intel.db`, override `CI_DB_PATH`) |
 
-Default: `data/competitor_intel.db` (gitignored). Override with `CI_DB_PATH`.
-
-Regenerate: init schema then run `make daily` — collectors backfill over time.
-
-## Monorepo layout
+## Monorepo
 
 | Path | Role |
 |------|------|
-| `packages/py-core` | `db`, `utils`, `alerts`, `ci_paths` |
-| `packages/py-collectors` | `collectors` package (operational ingest) |
-| `packages/py-enterprise` | `competitor_intel` SQLAlchemy package |
-| `apps/api` | Bun read API |
-| `apps/dashboard` | Svelte dashboard |
-| `apps/worker` | Daily pipeline scripts |
-| `apps/cli` | Operational CLI scripts |
+| `packages/py-collectors` | Collectors |
+| `packages/py-core` | DB, ingest, alerts |
+| `packages/py-enterprise` | SQLAlchemy (frozen — not in daily) |
+| `apps/worker` | `daily_intel.py`, automation |
+| `apps/api`, `apps/dashboard` | Read surface |
+| `apps/cli` | `intel.py`, `run_intel.py` |
 
-See [docs/architecture/MONOREPO.md](docs/architecture/MONOREPO.md).
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Hermes integration
+## Documentation
 
-HTTP or CLI only — no embedded imports. See [docs/architecture/HERMES_INTEGRATION.md](docs/architecture/HERMES_INTEGRATION.md).
+**[docs/README.md](docs/README.md)** — index
 
-## Docs
+| Start here | |
+|------------|--|
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What to build (single source of truth) |
+| [docs/PIPELINE.md](docs/PIPELINE.md) | Data flow and Makefile |
+| [docs/HANDBOOK.md](docs/HANDBOOK.md) | Schema and operations |
 
-- [Handbook](docs/HANDBOOK.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Python vs Rust](docs/architecture/PYTHON_VS_RUST.md)
-
-## Docker
+## Bare-metal health (API must be running)
 
 ```bash
-docker compose up api
-docker compose --profile worker run worker
+make api-dev          # terminal 1
+make health-check     # terminal 2 — SQLite + /health + /api/status
 ```

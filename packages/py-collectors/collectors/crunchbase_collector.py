@@ -3,38 +3,64 @@
 
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from xml.etree import ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from collectors.sources_registry import feeds_by_category
 from db.connection import get_conn
 from db.ingest import get_company_id, insert_raw_signal_dedup
 from utils.http import fetch_text
 
+from collectors.sources_registry import feeds_by_category
+
 logger = logging.getLogger("crunchbase")
 
 COMPANY_KEYWORDS = [
-    "Cursor", "Perplexity", "Cognition", "Harvey", "ElevenLabs",
-    "Runway", "Linear", "Notion", "Arc", "Coda", "Height",
-    "Mem", "Limitless", "Rewind", "Adept", "Anthropic",
-    "OpenAI", "Midjourney", "Stability AI", "Cohere", "Replicate",
-    "Hugging Face", "LangChain", "Pinecone", "Vercel", "Supabase",
-    "Stripe", "Figma", "Airtable", "Zapier", "Webflow",
+    "Cursor",
+    "Perplexity",
+    "Cognition",
+    "Harvey",
+    "ElevenLabs",
+    "Runway",
+    "Linear",
+    "Notion",
+    "Arc",
+    "Coda",
+    "Height",
+    "Mem",
+    "Limitless",
+    "Rewind",
+    "Adept",
+    "Anthropic",
+    "OpenAI",
+    "Midjourney",
+    "Stability AI",
+    "Cohere",
+    "Replicate",
+    "Hugging Face",
+    "LangChain",
+    "Pinecone",
+    "Vercel",
+    "Supabase",
+    "Stripe",
+    "Figma",
+    "Airtable",
+    "Zapier",
+    "Webflow",
 ]
 
 
-def feed_urls() -> List[str]:
+def feed_urls() -> list[str]:
     urls = [f.url for f in feeds_by_category("general_startup")]
     if not urls:
         urls = ["https://news.crunchbase.com/feed/"]
     return urls
 
 
-def fetch_feed(url: str) -> List[Dict[str, Any]]:
+def fetch_feed(url: str) -> list[dict[str, Any]]:
     body = fetch_text(url, timeout=20.0)
     if not body:
         return []
@@ -62,13 +88,16 @@ def fetch_feed(url: str) -> List[Dict[str, Any]]:
         return []
 
 
-def extract_companies(text: str) -> List[str]:
+def extract_companies(text: str) -> list[str]:
     return list({kw for kw in COMPANY_KEYWORDS if kw.lower() in text.lower()})
 
 
 def classify(title: str, desc: str) -> str:
     text = f"{title} {desc}".lower()
-    if any(w in text for w in ["raised", "funding", "series", "seed", "investment", "million", "billion"]):
+    if any(
+        w in text
+        for w in ["raised", "funding", "series", "seed", "investment", "million", "billion"]
+    ):
         return "funding"
     if any(w in text for w in ["acquired", "acquisition", "buys", "merger"]):
         return "acquisition"
@@ -77,11 +106,11 @@ def classify(title: str, desc: str) -> str:
     return "news"
 
 
-def store(items: List[Dict[str, Any]]) -> int:
+def store(items: list[dict[str, Any]]) -> int:
     conn = get_conn()
     cursor = conn.cursor()
     stored = 0
-    detected_at = datetime.now(timezone.utc).isoformat()
+    detected_at = datetime.now(UTC).isoformat()
 
     for item in items:
         companies = extract_companies(item["title"] + " " + item["description"])
@@ -117,7 +146,7 @@ def store(items: List[Dict[str, Any]]) -> int:
 
 
 def run() -> int:
-    items: List[Dict[str, Any]] = []
+    items: list[dict[str, Any]] = []
     for url in feed_urls():
         items.extend(fetch_feed(url))
     if not items:

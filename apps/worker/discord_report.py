@@ -4,21 +4,20 @@ Discord Intelligence Reporter
 Posts rich daily competitor intelligence briefs to Discord with retry logic.
 """
 
-import json
 import logging
 import os
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
 # Ensure parent directory is importable
 sys.path.insert(0, str(Path(__file__).parent))
-from daily_brief import generate_daily_brief as gen_brief, format_for_discord
-from db.connection import get_conn
 from utils.http import get_http_client
+
+from daily_brief import format_for_discord
+from daily_brief import generate_daily_brief as gen_brief
 
 logger = logging.getLogger("discord_report")
 
@@ -27,7 +26,7 @@ MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds with exponential backoff
 
 
-def post_to_discord(embed: dict, webhook_url: Optional[str] = None) -> bool:
+def post_to_discord(embed: dict, webhook_url: str | None = None) -> bool:
     """Post embed to Discord webhook with retry logic.
 
     Args:

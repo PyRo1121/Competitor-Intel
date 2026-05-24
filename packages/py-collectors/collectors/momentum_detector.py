@@ -5,12 +5,9 @@ Detects companies gaining momentum across multiple signals: funding, hiring,
 product launches, GitHub activity, and media mentions.
 """
 
-import json
 import logging
 import sqlite3
-from datetime import datetime, timezone
-from typing import Dict, List, Any, Optional, Tuple
-from collections import defaultdict
+from typing import Any
 
 logger = logging.getLogger("momentum_detector")
 
@@ -32,11 +29,11 @@ RISING_THRESHOLD = 0.2
 
 def compute_funding_velocity(cursor: sqlite3.Cursor, company_id: int, days: int = 30) -> float:
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) as rounds, COALESCE(SUM(amount_usd), 0) as total
         FROM funding_rounds
-        WHERE company_id = ? AND announced_date >= date('now', '-{} days')
-        """.format(days),
+        WHERE company_id = ? AND announced_date >= date('now', '-{days} days')
+        """,
         (company_id,),
     )
     row = cursor.fetchone()
@@ -45,24 +42,24 @@ def compute_funding_velocity(cursor: sqlite3.Cursor, company_id: int, days: int 
     rounds, total = row
     round_score = min(rounds / 3, 1.0)
     amount_score = min(total / 100_000_000, 1.0)
-    return (round_score * 0.4 + amount_score * 0.6)
+    return round_score * 0.4 + amount_score * 0.6
 
 
 def compute_signal_velocity(cursor: sqlite3.Cursor, company_id: int, days: int = 30) -> float:
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM raw_signals
-        WHERE company_id = ? AND detected_at >= datetime('now', '-{} days')
-        """.format(days),
+        WHERE company_id = ? AND detected_at >= datetime('now', '-{days} days')
+        """,
         (company_id,),
     )
     count = cursor.fetchone()[0]
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM raw_signals
-        WHERE company_id = ? AND detected_at >= datetime('now', '-{} days')
-        AND detected_at < datetime('now', '-{} days')
-        """.format(days, days * 2),
+        WHERE company_id = ? AND detected_at >= datetime('now', '-{days} days')
+        AND detected_at < datetime('now', '-{days * 2} days')
+        """,
         (company_id,),
     )
     prev_count = cursor.fetchone()[0]
@@ -77,15 +74,15 @@ def compute_hiring_velocity(cursor: sqlite3.Cursor, company_id: int, days: int =
         """
         SELECT COUNT(*) FROM job_postings
         WHERE company_id = ? AND is_active = 1
-        """.format(days),
+        """,
         (company_id,),
     )
     active_jobs = cursor.fetchone()[0]
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM team_members
-        WHERE company_id = ? AND joined_date >= date('now', '-{} days')
-        """.format(days),
+        WHERE company_id = ? AND joined_date >= date('now', '-{days} days')
+        """,
         (company_id,),
     )
     new_hires = cursor.fetchone()[0]
@@ -94,7 +91,7 @@ def compute_hiring_velocity(cursor: sqlite3.Cursor, company_id: int, days: int =
     return job_score * 0.6 + hire_score * 0.4
 
 
-def compute_github_velocity(cursor: sqlite3.Cursor, company_id: int, days: int = 30) -> float:
+def compute_github_velocity(cursor: sqlite3.Cursor, company_id: int, _days: int = 30) -> float:
     cursor.execute(
         """
         SELECT commits_last_30d, active_contributors_30d, star_growth_30d
@@ -119,19 +116,19 @@ def compute_github_velocity(cursor: sqlite3.Cursor, company_id: int, days: int =
 
 def compute_media_velocity(cursor: sqlite3.Cursor, company_id: int, days: int = 30) -> float:
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM intelligence_events
-        WHERE company_id = ? AND created_at >= datetime('now', '-{} days')
-        """.format(days),
+        WHERE company_id = ? AND created_at >= datetime('now', '-{days} days')
+        """,
         (company_id,),
     )
     recent = cursor.fetchone()[0]
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM intelligence_events
-        WHERE company_id = ? AND created_at >= datetime('now', '-{} days')
-        AND created_at < datetime('now', '-{} days')
-        """.format(days, days * 2),
+        WHERE company_id = ? AND created_at >= datetime('now', '-{days} days')
+        AND created_at < datetime('now', '-{days * 2} days')
+        """,
         (company_id,),
     )
     prev = cursor.fetchone()[0]
@@ -151,18 +148,22 @@ def compute_competitor_mentions(cursor: sqlite3.Cursor, company_id: int, days: i
     )
     relationships = cursor.fetchone()[0]
     cursor.execute(
-        """
+        f"""
         SELECT COUNT(*) FROM raw_signals rs
-        WHERE rs.company_id = ? AND rs.detected_at >= datetime('now', '-{} days')
+        WHERE rs.company_id = ? AND rs.detected_at >= datetime('now', '-{days} days')
         AND (
             SELECT COUNT(*) FROM competitor_relationships cr
             WHERE (cr.company_id = ? OR cr.competitor_id = ?)
             AND (
-                rs.data_json LIKE '%' || (SELECT name FROM companies WHERE id = cr.company_id) || '%'
-                OR rs.data_json LIKE '%' || (SELECT name FROM companies WHERE id = cr.competitor_id) || '%'
+                rs.data_json LIKE '%' || (
+                    SELECT name FROM companies WHERE id = cr.company_id
+                ) || '%'
+                OR rs.data_json LIKE '%' || (
+                    SELECT name FROM companies WHERE id = cr.competitor_id
+                ) || '%'
             )
         ) > 0
-        """.format(days),
+        """,
         (company_id, company_id, company_id),
     )
     co_mentions = cursor.fetchone()[0]
@@ -171,7 +172,7 @@ def compute_competitor_mentions(cursor: sqlite3.Cursor, company_id: int, days: i
     return rel_score * 0.4 + mention_score * 0.6
 
 
-def detect_momentum(window_days: int = 30) -> Dict[str, Any]:
+def detect_momentum(window_days: int = 30) -> dict[str, Any]:
     conn = get_conn()
     cursor = conn.cursor()
 
@@ -199,14 +200,16 @@ def detect_momentum(window_days: int = 30) -> Dict[str, Any]:
         elif composite >= RISING_THRESHOLD:
             status = "rising"
 
-        results.append({
-            "company_id": company_id,
-            "name": name,
-            "industry": industry,
-            "momentum_score": round(composite, 4),
-            "status": status,
-            "breakdown": {k: round(v, 4) for k, v in scores.items()},
-        })
+        results.append(
+            {
+                "company_id": company_id,
+                "name": name,
+                "industry": industry,
+                "momentum_score": round(composite, 4),
+                "status": status,
+                "breakdown": {k: round(v, 4) for k, v in scores.items()},
+            }
+        )
 
     results.sort(key=lambda x: x["momentum_score"], reverse=True)
 
@@ -215,7 +218,9 @@ def detect_momentum(window_days: int = 30) -> Dict[str, Any]:
 
     logger.info(
         "Momentum detection: %d companies analyzed, %d trending, %d breakout",
-        len(results), len(trending), len(breakout),
+        len(results),
+        len(trending),
+        len(breakout),
     )
 
     return {
@@ -226,7 +231,7 @@ def detect_momentum(window_days: int = 30) -> Dict[str, Any]:
     }
 
 
-def run() -> Dict[str, Any]:
+def run() -> dict[str, Any]:
     return detect_momentum()
 
 
@@ -236,7 +241,7 @@ if __name__ == "__main__":
     print(f"Analyzed: {result['analyzed']}")
     print(f"Trending: {len(result['trending'])}")
     print(f"Breakout: {len(result['breakout'])}")
-    if result['breakout']:
+    if result["breakout"]:
         print("\nBreakout companies:")
-        for c in result['breakout']:
+        for c in result["breakout"]:
             print(f"  {c['name']}: {c['momentum_score']:.2f}")

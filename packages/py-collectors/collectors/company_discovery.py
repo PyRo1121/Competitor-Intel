@@ -1,11 +1,10 @@
 import json
-import sqlite3
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional
-
-from db.connection import get_conn, DB_PATH
 import logging
+import sqlite3
+from datetime import UTC, datetime
+
+from db.connection import get_conn
+
 logger = logging.getLogger(__name__)
 
 FACTOR_WEIGHTS = {
@@ -23,28 +22,69 @@ FACTOR_WEIGHTS = {
     "momentum_risk": 0.12,
 }
 
-TIER1_INVESTORS = {"a16z", "sequoia", "benchmark", "accel", "founders fund", "andreessen horowitz", "sequoia capital"}
-TIER2_INVESTORS = {"lightspeed", "kleiner", "greylock", "index ventures", "bessemer", "first round", "yc", "y combinator"}
+TIER1_INVESTORS = {
+    "a16z",
+    "sequoia",
+    "benchmark",
+    "accel",
+    "founders fund",
+    "andreessen horowitz",
+    "sequoia capital",
+}
+TIER2_INVESTORS = {
+    "lightspeed",
+    "kleiner",
+    "greylock",
+    "index ventures",
+    "bessemer",
+    "first round",
+    "yc",
+    "y combinator",
+}
 TIER3_INVESTORS = {"tiger global", "coatue", "dragoneer", "baillie gifford", "fidelity"}
 
-SERIES_SCORES = {"series e": 1.0, "series d": 0.95, "series c": 0.9, "series b": 0.75, "series a": 0.6, "seed": 0.45, "pre-seed": 0.35, "series s": 0.4, "angel": 0.3}
+SERIES_SCORES = {
+    "series e": 1.0,
+    "series d": 0.95,
+    "series c": 0.9,
+    "series b": 0.75,
+    "series a": 0.6,
+    "seed": 0.45,
+    "pre-seed": 0.35,
+    "series s": 0.4,
+    "angel": 0.3,
+}
 
 INDUSTRY_TAM = {
-    "ai": 0.95, "llm": 0.95, "generative ai": 0.95, "foundation model": 0.9,
-    "ai agents": 0.85, "ai infrastructure": 0.85, "ai productivity": 0.8,
-    "developer tools": 0.75, "cybersecurity": 0.8, "fintech": 0.7,
-    "healthcare": 0.65, "biotech": 0.7, "robotics": 0.75,
-    "cloud": 0.8, "data": 0.7, "saas": 0.75,
+    "ai": 0.95,
+    "llm": 0.95,
+    "generative ai": 0.95,
+    "foundation model": 0.9,
+    "ai agents": 0.85,
+    "ai infrastructure": 0.85,
+    "ai productivity": 0.8,
+    "developer tools": 0.75,
+    "cybersecurity": 0.8,
+    "fintech": 0.7,
+    "healthcare": 0.65,
+    "biotech": 0.7,
+    "robotics": 0.75,
+    "cloud": 0.8,
+    "data": 0.7,
+    "saas": 0.75,
 }
 
 
-def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
+def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> dict:
     scores = {}
     total = 0.0
 
     # 1. Funding Round Quality - from funding_rounds table
     cursor.execute(
-        "SELECT round_type FROM funding_rounds WHERE company_id = ? ORDER BY announced_date DESC LIMIT 1",
+        (
+            "SELECT round_type FROM funding_rounds WHERE company_id = ? "
+            "ORDER BY announced_date DESC LIMIT 1"
+        ),
         (company_id,),
     )
     row = cursor.fetchone()
@@ -59,7 +99,10 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
 
     # 2. Investor Tier - from funding_rounds lead_investor
     cursor.execute(
-        "SELECT lead_investor FROM funding_rounds WHERE company_id = ? AND lead_investor IS NOT NULL",
+        (
+            "SELECT lead_investor FROM funding_rounds WHERE company_id = ? "
+            "AND lead_investor IS NOT NULL"
+        ),
         (company_id,),
     )
     investors_text = " ".join(r[0].lower() for r in cursor.fetchall() if r[0])
@@ -75,7 +118,10 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
 
     # 3. Capital Raised / Runway - from funding_rounds amounts and dates
     cursor.execute(
-        "SELECT COALESCE(SUM(amount_usd), 0), MAX(announced_date), COUNT(*) FROM funding_rounds WHERE company_id = ?",
+        (
+            "SELECT COALESCE(SUM(amount_usd), 0), MAX(announced_date), COUNT(*) "
+            "FROM funding_rounds WHERE company_id = ?"
+        ),
         (company_id,),
     )
     total_raised, last_date, round_count = cursor.fetchone() or (0, None, 0)
@@ -86,7 +132,7 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
         if last_date:
             try:
                 last_dt = datetime.fromisoformat(last_date.replace("Z", "+00:00"))
-                months_since = (datetime.now(timezone.utc) - last_dt).days / 30
+                months_since = (datetime.now(UTC) - last_dt).days / 30
                 recency_score = max(0, 1.0 - months_since / 24)
             except (ValueError, TypeError):
                 recency_score = 0.5
@@ -96,7 +142,10 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
 
     # 4. Capital Efficiency - GitHub stars per employee signal
     cursor.execute(
-        "SELECT COALESCE(star_growth_30d, 0), COALESCE(contributor_count, 0) FROM github_metrics WHERE company_id = ? ORDER BY extracted_at DESC LIMIT 1",
+        (
+            "SELECT COALESCE(star_growth_30d, 0), COALESCE(contributor_count, 0) "
+            "FROM github_metrics WHERE company_id = ? ORDER BY extracted_at DESC LIMIT 1"
+        ),
         (company_id,),
     )
     gh_row = cursor.fetchone()
@@ -143,8 +192,22 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
     for (data_json,) in cursor.fetchall():
         try:
             data = json.loads(data_json or "{}")
-            text = " ".join(str(data.get(k, "") or "") for k in ("title", "description", "text")).lower()
-            if any(kw in text for kw in ["pricing", "plan", "subscription", "saas", "enterprise", "pay", "premium", "pro tier"]):
+            text = " ".join(
+                str(data.get(k, "") or "") for k in ("title", "description", "text")
+            ).lower()
+            if any(
+                kw in text
+                for kw in [
+                    "pricing",
+                    "plan",
+                    "subscription",
+                    "saas",
+                    "enterprise",
+                    "pay",
+                    "premium",
+                    "pro tier",
+                ]
+            ):
                 pricing_detected = True
                 revenue_signals += 1
             if any(kw in text for kw in ["launch", "released", "announced", "now available"]):
@@ -161,7 +224,10 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
 
     # 7. Technical Depth - GitHub commits, languages, tech stack
     cursor.execute(
-        "SELECT COALESCE(commits_last_30d, 0), COALESCE(primary_language, '') FROM github_metrics WHERE company_id = ? ORDER BY extracted_at DESC LIMIT 1",
+        (
+            "SELECT COALESCE(commits_last_30d, 0), COALESCE(primary_language, '') "
+            "FROM github_metrics WHERE company_id = ? ORDER BY extracted_at DESC LIMIT 1"
+        ),
         (company_id,),
     )
     gh_metrics = cursor.fetchone()
@@ -178,15 +244,23 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
     scores["technical_depth"] = depth_score
     total += depth_score * FACTOR_WEIGHTS["technical_depth"]
 
-    # 8. Founder Team Quality - team_members count, roles, backgrounds
+    # 8. Founder Team Quality — corroborated team_members only (score floor 0.35)
+    team_corroboration_floor = 0.35
     cursor.execute(
-        "SELECT COUNT(*) FROM team_members WHERE company_id = ?",
-        (company_id,),
+        """
+        SELECT COUNT(*) FROM team_members
+        WHERE company_id = ? AND COALESCE(corroboration_score, 0) >= ?
+        """,
+        (company_id, team_corroboration_floor),
     )
     team_size = cursor.fetchone()[0]
     cursor.execute(
-        "SELECT role FROM team_members WHERE company_id = ? AND role IS NOT NULL",
-        (company_id,),
+        """
+        SELECT role FROM team_members
+        WHERE company_id = ? AND role IS NOT NULL
+          AND COALESCE(corroboration_score, 0) >= ?
+        """,
+        (company_id, team_corroboration_floor),
     )
     roles = [r[0].lower() for r in cursor.fetchall() if r[0]]
     founder_score = 0.2
@@ -219,7 +293,10 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
     )
     active_jobs = cursor.fetchone()[0]
     cursor.execute(
-        "SELECT COUNT(*) FROM team_members WHERE company_id = ? AND joined_date >= date('now', '-90 days')",
+        (
+            "SELECT COUNT(*) FROM team_members WHERE company_id = ? "
+            "AND joined_date >= date('now', '-90 days')"
+        ),
         (company_id,),
     )
     recent_hires = cursor.fetchone()[0]
@@ -240,7 +317,10 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
             tam_score = score
             break
     cursor.execute(
-        "SELECT COUNT(*) FROM raw_signals WHERE company_id = ? AND detected_at >= datetime('now', '-30 days')",
+        (
+            "SELECT COUNT(*) FROM raw_signals WHERE company_id = ? "
+            "AND detected_at >= datetime('now', '-30 days')"
+        ),
         (company_id,),
     )
     recent_30d = cursor.fetchone()[0]
@@ -274,12 +354,18 @@ def calculate_company_score(company_id: int, cursor: sqlite3.Cursor) -> Dict:
 
     # 12. Momentum / Risk - recent signals + event velocity
     cursor.execute(
-        "SELECT COUNT(*) FROM raw_signals WHERE company_id = ? AND detected_at >= datetime('now', '-7 days')",
+        (
+            "SELECT COUNT(*) FROM raw_signals WHERE company_id = ? "
+            "AND detected_at >= datetime('now', '-7 days')"
+        ),
         (company_id,),
     )
     recent_7d = cursor.fetchone()[0]
     cursor.execute(
-        "SELECT COUNT(*) FROM intelligence_events WHERE company_id = ? AND created_at >= datetime('now', '-7 days')",
+        (
+            "SELECT COUNT(*) FROM intelligence_events WHERE company_id = ? "
+            "AND created_at >= datetime('now', '-7 days')"
+        ),
         (company_id,),
     )
     events_7d = cursor.fetchone()[0]
@@ -306,17 +392,18 @@ def run_discovery_scan():
     companies = cursor.fetchall()
 
     updated = 0
-    for company_id, name in companies:
+    for company_id, _name in companies:
         result = calculate_company_score(company_id, cursor)
         cursor.execute(
             "UPDATE companies SET score = ?, last_scored_at = ? WHERE id = ?",
-            (result["score"], datetime.now(timezone.utc).isoformat(), company_id),
+            (result["score"], datetime.now(UTC).isoformat(), company_id),
         )
         updated += 1
 
     conn.commit()
     conn.close()
     logger.info("Scored %d companies with 12-factor VC model (zero placeholders)", updated)
+
 
 if __name__ == "__main__":
     run_discovery_scan()

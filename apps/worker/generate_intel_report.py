@@ -4,10 +4,9 @@ Competitor Intelligence Report Generator
 Clean, production-grade report generation for Obsidian + Discord.
 """
 
+import logging
 import sqlite3
 from datetime import datetime
-from pathlib import Path
-import logging
 
 from ci_paths import REPORTS_DIR, db_path
 
@@ -21,13 +20,17 @@ def get_top_events(limit=15):
     """Retrieve top intelligence events by amount."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("""
-        SELECT event_type, round_type, amount_usd, lead_investor, 
+    cur.execute(
+        """
+        SELECT event_type, round_type, amount_usd, lead_investor,
                is_rumor, announced_date, source
         FROM intelligence_events
-        ORDER BY CASE WHEN amount_usd IS NULL THEN 1 ELSE 0 END, amount_usd DESC, announced_date DESC
+        ORDER BY CASE WHEN amount_usd IS NULL THEN 1 ELSE 0 END,
+                 amount_usd DESC, announced_date DESC
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -37,12 +40,15 @@ def get_top_companies(limit=10):
     """Retrieve top companies by score."""
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(
+        """
         SELECT name, score, industry, github_stars
         FROM companies
         ORDER BY CASE WHEN score IS NULL THEN 1 ELSE 0 END, score DESC, github_stars DESC
         LIMIT ?
-    """, (limit,))
+    """,
+        (limit,),
+    )
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -91,7 +97,7 @@ def generate_discord_report():
     lines.append("")
     lines.append("## Top Tracked Companies")
 
-    for name, score, industry, stars in companies:
+    for name, score, _industry, stars in companies:
         score_str = f" (Score: {score:.1f})" if score else ""
         gh = f" • ⭐ {stars:,}" if stars else ""
         lines.append(f"- **{name}**{score_str}{gh}")
@@ -116,7 +122,7 @@ def generate_obsidian_note():
         f"# Competitor Intelligence — {datetime.now().strftime('%B %d, %Y')}",
         "",
         "## Key Funding Events",
-        ""
+        "",
     ]
 
     for event in events:
@@ -130,7 +136,7 @@ def generate_obsidian_note():
     lines.append("")
     lines.append("## Top Companies")
 
-    for name, score, industry, stars in companies:
+    for name, score, _industry, _stars in companies:
         score_str = f" (Score: {score or 0:.1f})" if score else ""
         lines.append(f"- [[{name}]]{score_str}")
 

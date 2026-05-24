@@ -5,28 +5,26 @@ EDGAR Form D Collector — SEC submissions API for known AI/tech CIKs.
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any
 
-from collectors.sources_registry import SEC_USER_AGENT
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
 from utils.http import close_http_client, safe_request
 
+from collectors.sources_registry import SEC_USER_AGENT
+
 logger = logging.getLogger("edgar_collector")
 
-AI_TECH_CIKS = [
-    "0001874178",  # Anthropic
-    "0001855744",  # Anysphere (Cursor)
-    "0001818212",  # Scale AI
-    "0001835632",  # Perplexity AI
-    "0001840503",  # Adept
-    "0001847590",  # Runway
-    "0001852016",  # ElevenLabs
-    "0001868275",  # Character.AI
-    "0001878333",  # Inflection AI
-    "0001881750",  # xAI
-    "0001900768",  # Stability AI
-]
+
+def _tracked_ciks() -> list[str]:
+    """Optional watchlist CIKs (comma-separated). Default: none — bulk ZIP is the wide net."""
+    import os
+
+    raw = os.environ.get("EDGAR_TRACKED_CIKS", "").strip()
+    if not raw:
+        return []
+    return [c.strip().zfill(10) for c in raw.split(",") if c.strip()]
+
 
 SEC_HEADERS = {
     "User-Agent": SEC_USER_AGENT,
@@ -34,13 +32,13 @@ SEC_HEADERS = {
 }
 
 
-def fetch_recent_form_d_filings(days_back: int = 30) -> List[Dict[str, Any]]:
+def fetch_recent_form_d_filings(days_back: int = 30) -> list[dict[str, Any]]:
     logger.info("Fetching recent SEC Form D filings...")
-    signals: List[Dict[str, Any]] = []
+    signals: list[dict[str, Any]] = []
     base_url = "https://data.sec.gov/submissions/CIK{}.json"
     cutoff = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
 
-    for cik in AI_TECH_CIKS:
+    for cik in _tracked_ciks():
         url = base_url.format(cik.zfill(10))
         resp = safe_request(url, timeout=12.0, headers=SEC_HEADERS)
         if resp is None:
@@ -70,7 +68,7 @@ def fetch_recent_form_d_filings(days_back: int = 30) -> List[Dict[str, Any]]:
     return signals
 
 
-def store_edgar_signals(signals: List[Dict[str, Any]]) -> int:
+def store_edgar_signals(signals: list[dict[str, Any]]) -> int:
     if not signals:
         return 0
 
@@ -111,8 +109,14 @@ def store_edgar_signals(signals: List[Dict[str, Any]]) -> int:
 
 def run_edgar_collector() -> int:
     try:
-        signals = fetch_recent_form_d_filings()
-        return store_edgar_signals(signals)
+        inserted = 0
+        if _tracked_ciks():
+            signals = fetch_recent_form_d_filings()
+            inserted = store_edgar_signals(signals)
+        from collectors.edgar_form_d_bulk import run_form_d_bulk_ingest
+
+        inserted += run_form_d_bulk_ingest()
+        return inserted
     finally:
         close_http_client()
 

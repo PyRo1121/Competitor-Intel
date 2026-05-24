@@ -10,14 +10,10 @@ import logging
 import re
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 
 logger = logging.getLogger("full_backfill")
 
-from db.connection import get_conn, DB_PATH
-
-
-
+from db.connection import get_conn
 
 
 def extract_amount(text: str):
@@ -41,7 +37,11 @@ def extract_amount(text: str):
                     continue
                 num = float(num_str.replace(",", ""))
                 unit = next(
-                    (g.lower() for g in groups if isinstance(g, str) and g.lower() in ["billion", "b", "million", "m"]),
+                    (
+                        g.lower()
+                        for g in groups
+                        if isinstance(g, str) and g.lower() in ["billion", "b", "million", "m"]
+                    ),
                     "m",
                 )
                 multiplier = 1_000_000_000 if unit.startswith("b") else 1_000_000
@@ -75,9 +75,7 @@ def full_backfill() -> tuple[int, int]:
     companies = get_all_companies()
     logger.info("Loaded %s companies for matching", len(companies))
 
-    cursor.execute(
-        "SELECT id, source, data_json, processed FROM raw_signals ORDER BY id"
-    )
+    cursor.execute("SELECT id, source, data_json, processed FROM raw_signals ORDER BY id")
     signals = cursor.fetchall()
     logger.info("Processing %s raw signals...", len(signals))
 
@@ -105,12 +103,11 @@ def full_backfill() -> tuple[int, int]:
 
         # Broad company matching against DB
         company_id = None
-        company_name = None
         text_lower = text.lower()
         for name, cid in companies.items():
             if name in text_lower:
                 company_id = cid
-                company_name = name.title()
+                name.title()
                 break
 
         event_type = "Funding Round"
@@ -123,9 +120,7 @@ def full_backfill() -> tuple[int, int]:
 
         dedup = generate_dedup_key(text)
 
-        cursor.execute(
-            "SELECT 1 FROM intelligence_events WHERE source_url = ?", (dedup,)
-        )
+        cursor.execute("SELECT 1 FROM intelligence_events WHERE source_url = ?", (dedup,))
         if cursor.fetchone():
             skipped += 1
             continue

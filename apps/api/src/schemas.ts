@@ -27,3 +27,35 @@ export const searchQuery = z.object({
 export const companyQuery = pagination.extend({
   sort: z.enum(["name", "score"]).default("name"),
 });
+
+export const fundingListQuery = z.object({
+  company_id: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
+export const fundingClaimsQuery = z.object({
+  company_id: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
+export const fundingInvestorsQuery = z.object({
+  tier: z.string().max(32).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
+export const idParam = z.object({
+  id: z.string().min(1).max(128),
+});
+
+export const jobsClaimsQuery = z.object({
+  company_id: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+});
+
+export const jobsCompanyQuery = z.object({
+  companyId: z.coerce.number().int().positive(),
+});
+
+export const jobsTrendsQuery = z.object({
+  days: z.coerce.number().int().min(1).max(365).default(30),
+});

@@ -1,26 +1,18 @@
-# Worker app
+# Worker
 
-Daily intelligence pipeline and batch scripts.
+Daily and frequent pipelines.
 
-## Entry point
+| Entry | Role |
+|-------|------|
+| `daily_intel.py` | **Canonical** daily orchestrator |
+| `frequent_intel.py` | RSS / open-web tier |
+| `automation/` | `collector_registry.py`, `parallel_collect.py` |
 
 ```bash
-# From monorepo root
-export PYTHONPATH="packages/py-collectors:packages/py-core:apps/worker:apps/cli:packages/py-enterprise/src"
-export CI_DB_PATH="$PWD/data/competitor_intel.db"
-
-python apps/worker/daily_intel.py
+uv run python apps/worker/daily_intel.py
+make daily
 ```
 
-## Layout
+Do not add a second `daily_intel` under `automation/` — removed as duplicate.
 
-| Path | Purpose |
-|------|---------|
-| `daily_intel.py` | Main daily orchestrator |
-| `automation/` | parallel_collect, collector_registry, run_utils |
-| `run_intel.py` | (in apps/cli) signal processing |
-| `*.py` | Reports, embeddings, Discord helpers |
-
-## Notes
-
-Scripts still reference some legacy `~/.hermes/...` paths — set `CI_DB_PATH` or follow import-path follow-ups in the migration report.
+Docs: [docs/PIPELINE.md](../../docs/PIPELINE.md) · [docs/ROADMAP.md](../../docs/ROADMAP.md)

@@ -17,7 +17,7 @@ dev = [
     "pytest-asyncio>=0.26.0",
     "pytest-cov>=6.1.0",
     "ruff>=0.11.0",
-    "mypy>=1.15.0",
+    "ty>=0.0.38",
     "pre-commit>=4.2.0",
     "factory-boy>=3.3.3",
     "respx>=0.22.0",
@@ -42,9 +42,56 @@ competitor-intel = { workspace = true }
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+src = ["packages", "apps/worker", "apps/cli", "tests", "scripts"]
+exclude = [
+    ".venv",
+    "**/__pycache__",
+    "data",
+    "integrations/hermes",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM", "ARG"]
+ignore = ["E402"]  # scripts often set PYTHONPATH before local imports
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ARG001", "ARG002"]
+"scripts/**" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ty.environment]
+python-version = "3.12"
+root = [
+    "packages/py-core",
+    "packages/py-collectors",
+    "packages/py-enterprise",
+    "apps/worker",
+    "apps/cli",
+    "tests",
+    "scripts",
+]
+
+[tool.ty.src]
+include = ["packages", "apps/worker", "apps/cli", "tests", "scripts"]
+
+[tool.ty.analysis]
+allowed-unresolved-imports = [
+    "discord",
+    "discord.**",
+    "tools.xai_http",
+    "tools.x_search_tool",
+    "scripts",
+    "scripts.**",
+]
+
+[[tool.ty.overrides]]
+include = ["tests/**", "scripts/**"]
+
+[tool.ty.overrides.rules]
+possibly-unresolved-reference = "warn"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -69,5 +116,8 @@ include = [
     "packages/py-core/db/connection.py",
     "packages/py-collectors/collectors/signal_processor.py",
     "packages/py-collectors/collectors/signal_company_resolver.py",
+    "packages/py-collectors/collectors/signal_repair.py",
+    "packages/py-collectors/collectors/intel_quality_gate.py",
+    "packages/py-collectors/collectors/funding_rollup.py",
     "packages/py-core/utils/http.py",
 ]

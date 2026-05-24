@@ -5,12 +5,28 @@ Competitor Intel is a **standalone product**. Hermes agents must not import Pyth
 ## Integration model
 
 ```
-Hermes agent (Grok / Claude / etc.)
+Hermes agent (Grok 4.3 for reasoning / X native search)
     │
     ├─► HTTP  GET/POST  →  apps/api  (port 3000)
+    │         └─► semantic search: Ollama embeddings + rerank (in monorepo)
+    │         └─► Grok synthesizes answers over retrieved context (in Hermes)
     │
-    └─► Shell competitor-intel / intel.py  →  apps/cli + apps/worker
+    └─► Shell call_intel.sh / intel.py  →  apps/cli + apps/worker
+              └─► daily_intel, run_intel, collectors, signal_processor
 ```
+
+## RAG stack (retrieve vs reason)
+
+| Step | Who | Technology |
+|------|-----|------------|
+| **Embed & rerank** | Monorepo | Ollama (`embedding_generator`, `reranker.unified_search`) |
+| **API / CLI retrieval** | Monorepo | `GET /api/search?mode=semantic`, `intel.py rerank`, `semantic_search.py` |
+| **Orchestration & synthesis** | Hermes agent | Grok 4.3 (and other models configured in Hermes) |
+| **X signal ingest** | Hermes → monorepo | Grok native X search → JSON → `x_signal_collector` |
+
+The monorepo does **not** call Grok for vector search. Hermes is in the loop for Q&A: it queries this platform for chunks, then Grok reasons over them.
+
+Batch labeling (`signal_processor.classify_for_storage`) is **keyword-only** — fast, reproducible, testable. Do not add a second in-repo LLM classify path; agent-level refinement stays in Hermes.
 
 ## HTTP API (preferred)
 
@@ -89,7 +105,7 @@ New path: `~/Documents/Competitor-Intel/`.
 
 Do not run from `~/.hermes/agents/competitor_intel/`:
 
-- `run_intel.py`, `intel.py`, `automation/daily_intel.py`
+- `apps/cli/run_intel.py`, `apps/cli/intel.py`, `apps/worker/daily_intel.py`
 - Any `python collectors/*.py` with Hermes `sys.path` hacks
 
-Use [`integrations/hermes/call_intel.sh`](../../integrations/hermes/call_intel.sh) or monorepo `make daily` / `make intel`. Operator summary: [docs/HERMES_INTEGRATION.md](../HERMES_INTEGRATION.md).
+Use [`integrations/hermes/call_intel.sh`](../../integrations/hermes/call_intel.sh) or monorepo `make daily` / `make intel`. Operator summary: [integrations/hermes/README.md](../../integrations/hermes/README.md).
