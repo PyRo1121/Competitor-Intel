@@ -82,6 +82,8 @@ def insert_raw_signal_dedup(
     company_id: int | None = None,
     detected_at: str | None = None,
     dedup_key: str | None = None,
+    *,
+    use_writer_lock: bool = True,
 ) -> bool:
     """
     Insert raw signal if (source, signal_type) not present.
@@ -100,6 +102,7 @@ def insert_raw_signal_dedup(
         cursor,
         _RAW_SIGNAL_SQL,
         (company_id, source, key, json.dumps(payload), ts),
+        use_writer_lock=use_writer_lock,
     )
     return cursor.rowcount > 0
 

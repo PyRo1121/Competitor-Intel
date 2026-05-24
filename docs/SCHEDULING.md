@@ -1,64 +1,129 @@
-# Scheduling
+# Scheduling (Hermes cron)
 
-Goal: **RSS and open-web sources update often**; **Hermes `x_search` runs on a separate cron** so `daily-prod` does not burn Grok quota inline.
+Use **Hermes built-in scheduler** — not system crontab or bash wrappers.  
+Docs: [Automate with Cron](https://hermes-agent.nousresearch.com/docs/guides/automate-with-cron) · [Scheduled Tasks](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)
 
-**Ops SSOT:** [PIPELINE.md](PIPELINE.md) · **Checklist:** [EXECUTION_CHECKLIST.md](EXECUTION_CHECKLIST.md) (P0-A = install crontab on your machine)
+**Ops:** [PIPELINE.md](PIPELINE.md) · **Bridge:** [integrations/hermes/README.md](../integrations/hermes/README.md)
 
-## Tiers
+## Gateway (required)
 
-| Tier | Command | Typical cadence | What runs |
-|------|---------|-----------------|-----------|
-| **Frequent** | `make frequent` or `call_intel.sh frequent` | Every 1–2 h (optional) | RSS, HN, YC, GitHub, TechCrunch/EDGAR slice → website → fanout → `signal_processor` → funding rollup (no X) |
-| **Grok X** | `make grok-refresh` or `call_intel.sh grok-refresh` | ~5×/day | `grok_refresh.py` → X fetch/ingest → processor/fanout as configured |
-| **Daily (prod)** | **`make daily-prod`** | 1×/day | Full parallel ingest **without** inline Grok (`CI_SKIP_GROK_X=1`, strict pipeline, dedup index) → sequential rollups → `daily_brief` |
-| **Full sweep** | `make full-sweep` | On demand | Daily pipeline + enriched X query export + `grok-refresh` + rollup |
-| **Repair** | `make intel-repair` | Weekly (optional) | `signal_repair.py` |
-
-Use **`make daily-tiered`** when Grok already ran via `grok-refresh` so the daily job does not double-call X.
-
-SQLite: [SQLITE.md](SQLITE.md). Defaults: `CI_SQLITE_WRITER_LOCK=1`, `CI_PARALLEL_COLLECTORS=4`, `CI_SQLITE_BUSY_TIMEOUT_MS=120000`. If `database is locked`, stop other writers or set `CI_PARALLEL_COLLECTORS=2`.
-
-## Minimal production crontab
-
-Matches [PIPELINE.md](PIPELINE.md) — adjust paths and timezone.
-
-```cron
-# Daily ingest (no inline Grok)
-0 6 * * * cd $HOME/Documents/Competitor-Intel && CI_DB_PATH=$PWD/data/competitor_intel.db make daily-prod >> logs/daily.log 2>&1
-
-# Grok X — example: 8:00, 11:00, 14:00, 17:00, 20:00 local
-0 8,11,14,17,20 * * * cd $HOME/Documents/Competitor-Intel && CI_DB_PATH=$PWD/data/competitor_intel.db make grok-refresh >> logs/grok.log 2>&1
-```
-
-Optional: `make frequent` hourly on weekdays if you want fresher RSS without waiting for daily.
-
-## Eastern (America/New_York) example
-
-```cron
-0 6 * * *   TZ=America/New_York cd $HOME/Documents/Competitor-Intel && CI_DB_PATH=$PWD/data/competitor_intel.db make daily-prod >> logs/daily.log 2>&1
-0 8,11,14,17,20 * * * TZ=America/New_York cd $HOME/Documents/Competitor-Intel && CI_DB_PATH=$PWD/data/competitor_intel.db make grok-refresh >> logs/grok.log 2>&1
-```
-
-Hermes wrapper (quota-aware): `~/.hermes/scripts/competitor_intel_prod.sh` or `./integrations/hermes/call_intel.sh daily` / `grok-refresh`. Do not run full Grok quota jobs hourly.
-
-## Environment flags
-
-| Variable | When |
-|----------|------|
-| `CI_DB_PATH` | Always — `data/competitor_intel.db` |
-| `CI_SKIP_GROK_X=1` | `daily-prod` / `daily-tiered` when Grok runs on its own cron |
-| `GROK_X_MAX_QUERIES` | Cap queries per Grok run |
-
-## Freshness checks (no API required)
+Jobs only fire when the Hermes gateway is running:
 
 ```bash
-export CI_DB_PATH="$PWD/data/competitor_intel.db"
-sqlite3 "$CI_DB_PATH" "SELECT MAX(detected_at) FROM raw_signals;"
-sqlite3 "$CI_DB_PATH" "SELECT MAX(created_at) FROM intelligence_events;"
+hermes cron status          # scheduler up?
+hermes gateway install      # background service (user)
+# Linux server: sudo hermes gateway install --system
 ```
 
-## Related docs
+Debug one tick: `hermes cron tick`
 
-- [PIPELINE.md](PIPELINE.md) — collectors and verification
-- [architecture/HERMES_INTEGRATION.md](architecture/HERMES_INTEGRATION.md) — Grok boundaries
-- [integrations/hermes/README.md](../integrations/hermes/README.md) — `call_intel.sh`
+## Production jobs (`--no-agent`)
+
+Pipeline runs are **Python scripts** — no LLM, no bash. Hermes executes the script on schedule and can deliver stdout (`--deliver local`).
+
+Hermes only accepts real files under `~/.hermes/scripts/` (filename only; **no symlinks**). After changing cron scripts in the repo, re-install:
+
+```bash
+cd ~/Documents/Competitor-Intel
+uv run python integrations/hermes/install_hermes_cron_scripts.py
+```
+
+Register jobs:
+
+```bash
+# Daily 06:00 — strict daily-prod (no inline Grok)
+hermes cron create "0 6 * * *" \
+  --no-agent \
+  --script ci_cron_daily_prod.py \
+  --name "competitor-intel-daily-prod" \
+  --deliver local
+
+# Grok X — 5×/day example
+hermes cron create "0 8,11,14,17,20 * * *" \
+  --no-agent \
+  --script ci_cron_grok_refresh.py \
+  --name "competitor-intel-grok-refresh" \
+  --deliver local
+
+# Optional: frequent RSS tier (hourly weekdays)
+hermes cron create "0 * * * 1-5" \
+  --no-agent \
+  --script ci_cron_frequent.py \
+  --name "competitor-intel-frequent" \
+  --deliver local
+
+# Weekly Sun 05:00 — SEC Form D bulk (private fundraising ZIP; not on daily)
+hermes cron create "0 5 * * 0" \
+  --no-agent \
+  --script ci_cron_edgar_weekly.py \
+  --name "competitor-intel-edgar-form-d-weekly" \
+  --deliver local
+```
+
+Pause legacy bash sweep if still enabled: `hermes cron pause 82e7afec268b` (old `competitor_intel_prod.sh` job).
+
+Test immediately:
+
+```bash
+hermes cron list
+hermes cron run <job_id>    # runs on next gateway tick
+```
+
+## Schedule syntax (Hermes)
+
+| Format | Example |
+|--------|---------|
+| Interval | `every 2h`, `every 30m` |
+| Cron | `0 6 * * *` (minute hour dom month dow) |
+| One-shot delay | `30m`, `2h` |
+
+Natural language like “daily at 9am” is **not** supported — use `0 9 * * *`.
+
+## Manual / Hermes chat
+
+From terminal (same as old shell shim):
+
+```bash
+uv run python integrations/hermes/call_intel.py daily-prod
+uv run python integrations/hermes/call_intel.py grok-refresh
+uv run python integrations/hermes/call_intel.py status
+```
+
+Or `make daily-prod`, `make grok-refresh` from repo root.
+
+In Hermes chat you can also ask: “create a cron job every day at 6am to run competitor intel daily-prod” — Hermes uses the `cronjob` tool (`/cron add ...`).
+
+## Optional: LLM cron with `--workdir`
+
+If you want Hermes to reason about failures (higher cost):
+
+```bash
+hermes cron create "0 6 * * *" \
+  --workdir "$CI_ROOT" \
+  --name "competitor-intel-daily-agent" \
+  --deliver local \
+  "Run: uv run python integrations/hermes/call_intel.py daily-prod. Report exit code and log summary. If success, respond [SILENT]."
+```
+
+Prefer **`--no-agent`** scripts above for production ingest.
+
+## Logs
+
+Cron output with `--deliver local` goes to Hermes delivery storage; pipeline logs also append under `logs/` when you run manually (`tee logs/daily.log`).
+
+## Freshness (no API)
+
+```bash
+export CI_DB_PATH="$CI_ROOT/data/competitor_intel.db"
+sqlite3 "$CI_DB_PATH" "SELECT MAX(detected_at) FROM raw_signals;"
+```
+
+## Manage jobs
+
+```bash
+hermes cron list
+hermes cron pause <id>
+hermes cron resume <id>
+hermes cron edit <id> --schedule "every 4h"
+hermes cron remove <id>
+```

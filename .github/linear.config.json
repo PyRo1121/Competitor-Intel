@@ -1,0 +1,16 @@
+{
+  "teamKey": "COM",
+  "teamId": "4156f08b-3cbb-4cc2-8614-6c4e77032b2b",
+  "projectId": "28fb1337-cc03-4cca-bad0-43cdf73630e1",
+  "projectUrl": "https://linear.app/competitor-intel/project/competitor-intel-e52ae7293016",
+  "workflowStates": {
+    "backlog": "1fd933ef-399a-457e-b966-0e006c8e604e",
+    "todo": "88a4fd6f-1abc-4756-9e78-cd40d0e62b35",
+    "inProgress": "fa9024c3-b26f-403c-be5c-aa7d8fb89276",
+    "inReview": "ea35d323-655f-454a-be06-76b52020a33d",
+    "done": "b2fcd08b-e082-411e-8601-5fc0cf147fe9",
+    "canceled": "073e69df-0d91-4b91-9166-213471710a3d"
+  },
+  "closeKeywords": ["fixes", "fixed", "fix", "closes", "closed", "close", "resolves", "resolved", "resolve", "completes", "completed", "complete"],
+  "doneMarkers": ["[done]", "(done)", "[closes]", "#done"]
+}

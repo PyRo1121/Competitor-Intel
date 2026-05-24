@@ -6,6 +6,7 @@
 | Document | Use when |
 |----------|----------|
 | **[EXECUTION_CHECKLIST.md](EXECUTION_CHECKLIST.md)** | **What to do next** — ordered tasks for humans + AI |
+| [LINEAR.md](LINEAR.md) | Issues (COM-*), labels, agent rules, CI auto-close |
 | [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md) | Why we build; scoring/trust/SaaS shape |
 | [PIPELINE.md](PIPELINE.md) | What runs daily, active collectors, `make verify` |
 | [ENGINEERING.md](ENGINEERING.md) | Production naming, shared modules, no dead code |
@@ -16,6 +17,6 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Monorepo layout |
 | [LINTING.md](LINTING.md) | `make lint`, Ruff, ty |
 | [architecture/HERMES_INTEGRATION.md](architecture/HERMES_INTEGRATION.md) | Hermes / Grok boundaries |
-| [../integrations/hermes/README.md](../integrations/hermes/README.md) | `call_intel.sh` commands |
+| [../integrations/hermes/README.md](../integrations/hermes/README.md) | `call_intel.py`, Hermes cron scripts |
 
 Do not add historical roadmap or audit shards here; extend **PIPELINE.md** for operator changes.

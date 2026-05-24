@@ -56,12 +56,11 @@ class RawSignalBatchWriter:
         payload.setdefault("url", url)
         payload.setdefault("link", url)
         ts = detected_at or self._detected_default
-        with writer_lock():
-            self._cursor.execute(
-                _RAW_SIGNAL_INSERT,
-                (company_id, source, key, json.dumps(payload), ts),
-            )
-            ok = self._cursor.rowcount > 0
+        self._cursor.execute(
+            _RAW_SIGNAL_INSERT,
+            (company_id, source, key, json.dumps(payload), ts),
+        )
+        ok = self._cursor.rowcount > 0
         if ok:
             self.inserted += 1
         self._pending += 1

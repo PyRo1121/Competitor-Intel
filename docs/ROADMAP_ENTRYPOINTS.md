@@ -57,7 +57,7 @@ These were removed from the tree; **do not restore as `scripts/`**. Implement as
 | `grok_x_normalize.py` | Normalize Hermes raw JSON | **Move** | `collectors/grok_x_fetcher.normalize_batch()` |
 | `claims_audit.py` | Data-quality SQL audit | **Move** | `packages/py-core/qa/claims_audit.py` |
 | `sqlite_health.py` | backup / checkpoint / analyze | **Move** | `packages/py-core/db/health.py` |
-| `healthcheck.sh` | Operator probe | **Move** | `apps/worker/healthcheck.py` (`intel health` / `make health-check`) |
+| `healthcheck.sh` | Operator probe | **Done** | `apps/cli/healthcheck.py` (`make health-check`) |
 | `relink_actionable_orphans.py` | Repair orphan signals | **Move** | `collectors/signal_repair.relink_actionable()` |
 | `reprocess_raw_signals.py` | Re-run processor | **Move** | `signal_processor` CLI flags `--reprocess` |
 | `export_ingest_catalog.py` | Status JSON for ingest | **Move** | `packages/py-core/ingest/catalog.py` |
@@ -114,7 +114,7 @@ Same work as cron; difference is **one binary** and internal queue. Cost: harder
 | **2a-01** | Move `fetch_x` + `fetch_xurl` → `apps/worker/x_refresh/` | `grok_refresh` imports module; delete `scripts/fetch_*.py` |
 | **2a-02** | Move `export_x_monitor_queries`, `grok_x_normalize` into `grok_x_fetcher` | Hermes path documented; one import path |
 | **2a-03** | Move `claims_audit`, `sqlite_health` into `py-core` | `make claims-audit` / `sqlite-backup` unchanged |
-| **2a-04** | Replace `healthcheck.sh` with Python | `make health-check` works on fresh CI DB |
+| **2a-04** | Replace `healthcheck.sh` with Python | **Done** — `apps/cli/healthcheck.py` |
 | **2a-05** | Move smoke + golden eval under `tests/` | Not in operator docs |
 | **2a-06** | Delete empty `scripts/`; update Makefile + Hermes shim | `rg 'scripts/' Makefile` → only comments or none |
 
@@ -169,4 +169,4 @@ uv run python -m apps.cli.intel audit claims --strict
 uv run python -m apps.cli.intel enrich export  # slice 2b
 ```
 
-`integrations/hermes/call_intel.sh` remains a thin **bash shim** for Hermes agents only (acceptable).
+`integrations/hermes/call_intel.py` is the Hermes bridge; schedule via `hermes cron` + `cron_*.py` ([SCHEDULING.md](SCHEDULING.md)).

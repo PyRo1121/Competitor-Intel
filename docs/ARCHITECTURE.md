@@ -11,8 +11,8 @@ Competitor-Intel/
 ├── apps/worker/               # daily_intel.py, grok_refresh.py, daily_brief.py
 ├── apps/worker/automation/    # collector_registry, parallel_collect, run_utils
 ├── apps/cli/                  # intel.py, run_intel.py (thin schema gate)
-├── integrations/hermes/       # call_intel.sh, ingest_grok_x.py
-├── scripts/                   # healthcheck, claims_audit, Grok/X helpers
+├── integrations/hermes/       # call_intel.py, cron_*.py, ingest_grok_x.py
+├── scripts/                   # claims_audit, Grok/X helpers (migrate to packages in E1)
 ├── tests/
 └── data/                      # SQLite + generated exports (gitignored)
 ```
@@ -34,4 +34,4 @@ Symlinks at repo root: `collectors` → `packages/py-collectors/collectors`, `au
 |------|------|
 | uv | Python 3.12 workspace (`py-core`, `py-collectors`) |
 | SQLite | `CI_DB_PATH` (default `data/competitor_intel.db`) |
-| Hermes agent | External; invoke via `integrations/hermes/call_intel.sh` |
+| Hermes agent | External; `call_intel.py` + `hermes cron` ([SCHEDULING.md](SCHEDULING.md)) |

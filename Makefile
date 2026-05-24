@@ -1,4 +1,4 @@
-.PHONY: sync daily frequent grok-refresh full-sweep export-x-queries export-x-queries-enriched compile test lock export-reqs lint lint-py lint-py-fix health-check verify verify-dry-run track2-verify
+.PHONY: sync daily daily-prod edgar-form-d-weekly frequent grok-refresh full-sweep export-x-queries export-x-queries-enriched compile test lock export-reqs lint lint-py lint-py-fix health-check verify verify-dry-run track2-verify
 
 ROOT := $(CURDIR)
 export CI_DB_PATH ?= $(ROOT)/data/competitor_intel.db
@@ -31,6 +31,10 @@ daily:
 # Production cron: tiered daily + strict funding path + dedup index required at init
 daily-prod:
 	CI_SKIP_GROK_X=1 CI_STRICT_PIPELINE=1 CI_REQUIRE_DEDUP_INDEX=1 uv run python apps/worker/daily_intel.py
+
+# SEC Form D quarterly ZIP (private rounds); not on daily — avoids SQLite writer fights
+edgar-form-d-weekly:
+	EDGAR_FORM_D_BULK=1 uv run python apps/worker/edgar_form_d_weekly.py
 
 daily-with-grok:
 	uv run python apps/worker/daily_intel.py
@@ -143,7 +147,7 @@ lint: lint-py
 
 # Bare-metal ops health (SQLite; optional CI_HEALTH_REQUIRE_API=1 for legacy API URL).
 health-check:
-	bash scripts/healthcheck.sh
+	PYTHONPATH=packages/py-core:packages/py-collectors:apps/cli uv run python apps/cli/healthcheck.py
 
 track3-verify: lint test-cov golden-eval
 
@@ -231,3 +235,11 @@ migrate-db:
 
 export-reqs:
 	uv export --no-dev --format requirements-txt -o requirements.txt
+
+# Linear: dry-run commit sync (needs LINEAR_API_KEY in env). See docs/LINEAR.md
+linear-sync-dry:
+	@test -n "$$LINEAR_API_KEY" || (echo "Set LINEAR_API_KEY"; exit 1)
+	uv run python .github/scripts/linear_commit_sync.py --dry-run --message "fixes COM-5"
+
+linear-sync-test:
+	uv run pytest tests/test_linear_commit_sync.py -q

@@ -18,7 +18,7 @@ make claims-audit-strict
 make health-check        # SQLite checks
 ```
 
-Hermes: `integrations/hermes/call_intel.sh daily` (see [integrations/hermes/README.md](integrations/hermes/README.md)).
+Hermes: `hermes cron` + [docs/SCHEDULING.md](docs/SCHEDULING.md); manual: `uv run python integrations/hermes/call_intel.py daily-prod`
 
 CLI: `make cli ARGS="status"` or `uv run python apps/cli/intel.py daily --export`.
 

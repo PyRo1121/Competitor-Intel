@@ -43,7 +43,9 @@ Env: copy `.env.example` → `.env`; set `HERMES_AGENT_ROOT` if not using `~/.he
 
 ## Active collectors (registry only)
 
-**Parallel (daily, no X):** RSS, Hacker News, YC, GitHub signals, TechCrunch/EDGAR, SEC EDGAR, ESMA MiCA.
+**Parallel (daily, no X):** RSS, Hacker News, YC, GitHub signals, TechCrunch funding scrape, ESMA MiCA.
+
+**Weekly (Form D bulk):** `make edgar-form-d-weekly` — SEC Form D quarterly ZIP (US private rounds / Reg D). Not on daily (SQLite writer load).
 
 **Grok (separate cron):** `x_signal_collector.py` via `make grok-refresh`.
 
@@ -52,6 +54,17 @@ Env: copy `.env.example` → `.env`; set `HERMES_AGENT_ROOT` if not using `~/.he
 Not on daily: Product Hunt, Crunchbase, AngelList, YouTube, momentum/competitor mappers, embeddings, tweet generator, enrichment runner.
 
 On-demand only: `uv run python apps/cli/intel.py <name>` for scripts still in tree with `__main__` but not on the daily schedule.
+
+## Fetch concurrency
+
+Collectors fetch many URLs in parallel (threads); SQLite writes batch under one `writer_lock` per collector to avoid `database is locked`.
+
+| Env | Default | Role |
+|-----|---------|------|
+| `CI_RSS_FETCH_WORKERS` | 20 | RSS feeds in parallel |
+| `CI_HN_FETCH_WORKERS` | 24 | HN story + comment fetches |
+| `CI_WEBSITE_FETCH_WORKERS` | 16 | Company homepages |
+| `CI_PARALLEL_COLLECTORS` | 3 | Collector **subprocesses** at once (lower = less DB contention) |
 
 ## Verification
 

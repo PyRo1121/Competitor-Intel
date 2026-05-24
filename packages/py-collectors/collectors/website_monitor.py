@@ -2,14 +2,25 @@
 import hashlib
 import json
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
 
 from db.connection import get_conn
+from db.writer_lock import writer_lock
 
 from collectors.enrichment.utils import safe_request
 
 logger = logging.getLogger("website_monitor")
+
+
+def _website_fetch_workers() -> int:
+    raw = os.environ.get("CI_WEBSITE_FETCH_WORKERS", "16").strip()
+    try:
+        return max(1, min(32, int(raw)))
+    except ValueError:
+        return 16
 
 
 def fetch_homepage(url: str) -> dict[str, Any] | None:
@@ -50,9 +61,11 @@ def fetch_homepage(url: str) -> dict[str, Any] | None:
         return None
 
 
-def detect_changes(company_id: int, snapshot: dict[str, Any]) -> dict[str, Any] | None:
-    conn = get_conn()
-    cursor = conn.cursor()
+def detect_changes(
+    cursor,
+    company_id: int,
+    snapshot: dict[str, Any],
+) -> dict[str, Any] | None:
     cursor.execute(
         """
         SELECT hash, title, meta_description FROM website_snapshots
@@ -61,7 +74,6 @@ def detect_changes(company_id: int, snapshot: dict[str, Any]) -> dict[str, Any] 
         (company_id,),
     )
     row = cursor.fetchone()
-    conn.close()
     if not row:
         return None
     old_hash, old_title, old_desc = row
@@ -76,10 +88,11 @@ def detect_changes(company_id: int, snapshot: dict[str, Any]) -> dict[str, Any] 
 
 
 def store_snapshot(
-    company_id: int, snapshot: dict[str, Any], changes: dict[str, Any] | None = None
+    cursor,
+    company_id: int,
+    snapshot: dict[str, Any],
+    changes: dict[str, Any] | None = None,
 ):
-    conn = get_conn()
-    cursor = conn.cursor()
     cursor.execute(
         """
         INSERT INTO website_snapshots
@@ -96,8 +109,6 @@ def store_snapshot(
             datetime.now(UTC).isoformat(),
         ),
     )
-    conn.commit()
-    conn.close()
 
 
 def run() -> int:
@@ -105,19 +116,34 @@ def run() -> int:
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, website FROM companies WHERE website IS NOT NULL")
     companies = cursor.fetchall()
-    conn.close()
+
     checked = 0
     changed = 0
-    for company_id, name, website in companies:
-        snapshot = fetch_homepage(website)
-        if not snapshot:
-            continue
-        checked += 1
-        changes = detect_changes(company_id, snapshot)
-        store_snapshot(company_id, snapshot, changes)
-        if changes:
-            changed += 1
-            logger.info("Website change detected for %s: %s", name, list(changes.keys()))
+    workers = _website_fetch_workers()
+
+    def _fetch_row(row: tuple[int, str, str]) -> tuple[int, str, dict[str, Any] | None]:
+        company_id, name, website = row
+        return company_id, name, fetch_homepage(website)
+
+    results: list[tuple[int, str, dict[str, Any] | None]] = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_fetch_row, row) for row in companies]
+        for future in as_completed(futures):
+            results.append(future.result())
+
+    with writer_lock():
+        for company_id, name, snapshot in results:
+            if not snapshot:
+                continue
+            checked += 1
+            row_changes = detect_changes(cursor, company_id, snapshot)
+            store_snapshot(cursor, company_id, snapshot, row_changes)
+            if row_changes:
+                changed += 1
+                logger.info("Website change detected for %s: %s", name, list(row_changes.keys()))
+        conn.commit()
+    conn.close()
+
     logger.info("Checked %d websites, %d changed", checked, changed)
     return changed
 

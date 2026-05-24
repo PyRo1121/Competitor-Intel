@@ -1,0 +1,49 @@
+# Close Linear issues when commits on main use fixes COM-NNN / COM-NNN: ... [done]
+# Requires repo secret: LINEAR_API_KEY (Linear → Settings → API → Personal API keys)
+# See docs/LINEAR.md
+
+name: Linear sync
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no Linear mutations)"
+        type: boolean
+        default: true
+
+jobs:
+  sync-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Sync commits to Linear
+        env:
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: |
+          if [ -z "$LINEAR_API_KEY" ]; then
+            echo "LINEAR_API_KEY secret not configured — skip (see docs/LINEAR.md)"
+            exit 0
+          fi
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+          if [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || [ -z "$BEFORE" ]; then
+            BEFORE="$(git rev-parse "${AFTER}^" 2>/dev/null || echo "")"
+          fi
+          if [ -z "$BEFORE" ]; then
+            echo "No parent commit; nothing to sync"
+            exit 0
+          fi
+          DRY=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY="--dry-run"
+          fi
+          git log --format=%H%x09%s%x09%b "${BEFORE}..${AFTER}" | \
+            uv run python .github/scripts/linear_commit_sync.py $DRY

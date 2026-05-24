@@ -51,20 +51,23 @@ Gate: pipeline-only tree; Hermes shim; docs exist; production naming.
 
 ### P0-A — Environment & schedule
 
-- [ ] `uv sync` from repo root
-- [ ] `.env` from `.env.example`; `CI_DB_PATH` → prod DB path
-- [ ] `HERMES_AGENT_ROOT` set if not default `~/.hermes/hermes-agent`
-- [ ] Cron: `make daily-prod` daily
-- [ ] Cron: `make grok-refresh` (optional, separate from daily)
-- [ ] Log rotation / `logs/` path for daily output
+- [x] `uv sync` from repo root — 2026-05-24
+- [x] `.env` from `.env.example`; `CI_DB_PATH` → prod DB path — 2026-05-24
+- [x] `HERMES_AGENT_ROOT` default `~/.hermes/hermes-agent` (unset in `.env` OK if path exists) — 2026-05-24
+- [x] Hermes cron: `competitor-intel-daily-prod` (`59fc409ed31a`) — 2026-05-24
+- [x] Hermes cron: `competitor-intel-grok-refresh` (`bf5c245af6e9`) — 2026-05-24
+- [x] `hermes cron status` — gateway running — 2026-05-24
+- [x] Legacy bash sweep paused (`82e7afec268b`) — 2026-05-24
+- [x] `logs/` ready for manual runs — 2026-05-24
+- [x] No bash ops shims (`call_intel.sh`, `healthcheck.sh`, crontab templates removed) — 2026-05-24
 
 ### P0-B — Pipeline mechanics
 
-- [ ] `make migrate-dedup` or schema init; dedup index present (`CI_REQUIRE_DEDUP_INDEX=1` path)
-- [ ] `make daily-prod` completes without `--force`
-- [ ] `make rollup-all` (or rollups enabled in daily env)
-- [ ] `make claims-audit-strict` passes on prod DB
-- [ ] `make health-check` passes (SQLite checks)
+- [x] `make migrate-dedup` or schema init; dedup index present — 2026-05-24
+- [ ] `make daily-prod` completes without `--force` (in progress; EDGAR hit `database is locked` once)
+- [x] `make rollup-all` (or rollups enabled in daily env) — rollups on daily path
+- [x] `make claims-audit-strict` passes on prod DB — 2026-05-24
+- [x] `make health-check` passes (SQLite checks) — 2026-05-24
 - [ ] No duplicate RSS noise on spot-check (same story not 4×)
 - [ ] Funding on 3 watchlist companies matches sources you’d quote
 
@@ -101,9 +104,9 @@ make health-check
 - [ ] **2a-01** Move `fetch_x` + `fetch_xurl` → `apps/worker/x_refresh/`; `grok_refresh` imports module
 - [ ] **2a-02** Move `export_x_monitor_queries`, `grok_x_normalize` into `grok_x_fetcher` (or worker)
 - [ ] **2a-03** Move `claims_audit`, `sqlite_health` → `packages/py-core`
-- [ ] **2a-04** Replace `healthcheck.sh` with Python; `make health-check` unchanged UX
+- [x] **2a-04** Replace `healthcheck.sh` with Python; `make health-check` unchanged UX — 2026-05-24
 - [ ] **2a-05** Move `smoke_hermes_x_pipeline`, `eval_golden_set` under `tests/`
-- [ ] **2a-06** Delete empty `scripts/`; update Makefile + `call_intel.sh`
+- [ ] **2a-06** Delete empty `scripts/`; update Makefile + Hermes docs (`call_intel.py`)
 - [ ] Verify: `rg 'scripts/[a-z_]+\.py' Makefile apps/worker integrations/hermes` → no prod refs
 - [ ] Verify: `make daily-prod`, `make grok-refresh`, `make verify` green
 
@@ -177,7 +180,7 @@ make health-check
 - [ ] Q&A: company funding, recent speculative/verified events
 - [ ] Draft pack: top N events + brief excerpt JSON
 - [ ] Hermes does **not** write verified funding without DB path
-- [ ] `call_intel.sh` docs updated
+- [x] `call_intel.py` + [SCHEDULING.md](SCHEDULING.md) (Hermes cron) documented — 2026-05-24
 
 **P4 gate:** You use Hermes + dashboard together for 2 weeks → **P5**.
 
@@ -259,4 +262,5 @@ make health-check
 
 | Date | Agent / human | Completed IDs | Notes |
 |------|---------------|---------------|-------|
-| | | | |
+| 2026-05-19 | Cursor | Linear bootstrap | [Competitor Intel project](https://linear.app/competitor-intel/project/competitor-intel-e52ae7293016) — milestones S0–P7/E2/E3, 86 issues from this checklist |
+| 2026-05-19 | Cursor | Linear CI + labels | [docs/LINEAR.md](LINEAR.md), `.github/workflows/linear-sync.yml`, area/workflow labels, agent playbook |

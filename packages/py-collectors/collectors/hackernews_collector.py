@@ -4,15 +4,19 @@
 import html
 import json
 import logging
+import os
 import re
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlparse
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup
+from db.writer_lock import writer_lock
 from utils.http import close_http_client, safe_request
+from utils.http_parallel import parallel_map
 
 from collectors.company_match import resolve_company_id as match_company_id
 from collectors.entity_extract import extract_entities_from_text, text_has_hype
@@ -28,6 +32,14 @@ TOP_STORIES = f"{HN_API}/topstories.json"
 NEW_STORIES = f"{HN_API}/newstories.json"
 COMMENT_FETCH_LIMIT = 6
 THREAD_COMMENT_MAX = 500
+
+
+def _hn_fetch_workers() -> int:
+    raw = os.environ.get("CI_HN_FETCH_WORKERS", "24").strip()
+    try:
+        return max(1, min(64, int(raw)))
+    except ValueError:
+        return 24
 
 
 def fetch_story_ids(endpoint: str, limit: int = 50) -> list[int]:
@@ -58,18 +70,28 @@ def _strip_html(text: str) -> str:
     return html.unescape(cleaned).strip()
 
 
+def _comment_body(kid: int) -> str | None:
+    item = fetch_story(kid)
+    if not item or item.get("type") != "comment":
+        return None
+    body = _strip_html(str(item.get("text") or ""))
+    if len(body) <= 40:
+        return None
+    return body[:THREAD_COMMENT_MAX]
+
+
 def fetch_thread_comments(story: dict[str, Any], limit: int = COMMENT_FETCH_LIMIT) -> list[str]:
-    """Top-level HN comments — often name investors, terms, or link to press."""
-    kids = story.get("kids") or []
-    comments: list[str] = []
-    for kid in kids[:limit]:
-        item = fetch_story(int(kid))
-        if not item or item.get("type") != "comment":
-            continue
-        body = _strip_html(str(item.get("text") or ""))
-        if len(body) > 40:
-            comments.append(body[:THREAD_COMMENT_MAX])
-    return comments
+    """Top-level HN comments — parallel item fetches."""
+    kids = [int(k) for k in (story.get("kids") or [])[:limit]]
+    if not kids:
+        return []
+    bodies = parallel_map(
+        _comment_body,
+        kids,
+        workers=min(8, len(kids)),
+        env_var="CI_HN_FETCH_WORKERS",
+    )
+    return [b for b in bodies if b]
 
 
 def is_startup_relevant(story: dict[str, Any]) -> bool:
@@ -144,7 +166,8 @@ def store_signals(stories: list[dict[str, Any]], company_names: list[str]) -> in
     stored = 0
     detected_at = datetime.now(UTC).isoformat()
 
-    for story in stories:
+    def _store_one(story: dict[str, Any]) -> int:
+        count = 0
         title = story.get("title", "")
         text = _strip_html(str(story.get("text") or ""))
         comments = story.get("thread_comments") or []
@@ -188,8 +211,14 @@ def store_signals(stories: list[dict[str, Any]], company_names: list[str]) -> in
             data,
             company_id=company_id,
             detected_at=detected_at,
+            use_writer_lock=False,
         ):
-            stored += 1
+            count += 1
+        return count
+
+    with writer_lock():
+        for story in stories:
+            stored += _store_one(story)
 
     conn.commit()
     conn.close()
@@ -198,10 +227,27 @@ def store_signals(stories: list[dict[str, Any]], company_names: list[str]) -> in
 
 
 def enrich_stories_with_threads(stories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    need_threads = [s for s in stories if (s.get("descendants") or 0) >= 3]
+    if not need_threads:
+        return stories
+
+    def _enrich(story: dict[str, Any]) -> dict[str, Any]:
+        story["thread_comments"] = fetch_thread_comments(story)
+        return story
+
+    workers = min(_hn_fetch_workers(), len(need_threads))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        enriched = list(pool.map(_enrich, need_threads))
+    by_id = {s["id"]: s for s in enriched}
     for story in stories:
-        if (story.get("descendants") or 0) >= 3:
-            story["thread_comments"] = fetch_thread_comments(story)
+        if story["id"] in by_id:
+            story["thread_comments"] = by_id[story["id"]].get("thread_comments") or []
     return stories
+
+
+def fetch_stories_parallel(story_ids: list[int]) -> list[dict[str, Any]]:
+    raw = parallel_map(fetch_story, story_ids, env_var="CI_HN_FETCH_WORKERS")
+    return [s for s in raw if s and is_startup_relevant(s)]
 
 
 def _story_domain(url: str | None) -> str:
@@ -213,7 +259,13 @@ def _story_domain(url: str | None) -> str:
         return ""
 
 
-def store_algolia_show_hn(cursor, company_names: list[str], pages: int = 12) -> int:
+def store_algolia_show_hn(
+    cursor,
+    company_names: list[str],
+    pages: int = 12,
+    *,
+    use_writer_lock: bool = True,
+) -> int:
     """Historical Show HN via Algolia (no API key)."""
     domain_index = build_domain_index(cursor)
     detected_at = datetime.now(UTC).isoformat()
@@ -273,6 +325,7 @@ def store_algolia_show_hn(cursor, company_names: list[str], pages: int = 12) -> 
                 company_id=company_id,
                 detected_at=detected_at,
                 dedup_key=f"hn_algolia_{object_id}",
+                use_writer_lock=use_writer_lock,
             ):
                 stored += 1
 
@@ -284,31 +337,42 @@ def store_algolia_show_hn(cursor, company_names: list[str], pages: int = 12) -> 
     return stored
 
 
+def _skip_algolia() -> bool:
+    return os.environ.get("CI_HN_SKIP_ALGOLIA", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
 def run() -> int:
     try:
         story_ids = fetch_story_ids(SHOW_HN, limit=40)
         story_ids += fetch_story_ids(TOP_STORIES, limit=40)
         story_ids += fetch_story_ids(NEW_STORIES, limit=25)
         story_ids = list(dict.fromkeys(story_ids))
-        logger.info("Fetching %d HN stories", len(story_ids))
-        stories = []
-        for sid in story_ids:
-            story = fetch_story(sid)
-            if story and is_startup_relevant(story):
-                stories.append(story)
+        logger.info("Fetching %d HN stories (parallel)", len(story_ids))
+        stories = fetch_stories_parallel(story_ids)
         logger.info("Found %d startup-relevant stories", len(stories))
         company_names = load_company_names()
         stored = 0
         if stories:
             stories = enrich_stories_with_threads(stories)
             stored = store_signals(stories, company_names)
-        conn = get_conn()
-        cursor = conn.cursor()
-        try:
-            stored += store_algolia_show_hn(cursor, company_names)
-            conn.commit()
-        finally:
-            conn.close()
+        if not _skip_algolia():
+            conn = get_conn()
+            cursor = conn.cursor()
+            try:
+                with writer_lock():
+                    stored += store_algolia_show_hn(
+                        cursor, company_names, use_writer_lock=False
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        else:
+            logger.info("HN Algolia Show HN backfill skipped (CI_HN_SKIP_ALGOLIA)")
         return stored
     finally:
         close_http_client()

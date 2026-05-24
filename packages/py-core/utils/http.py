@@ -24,7 +24,7 @@ def get_http_client() -> httpx.Client:
             headers=DEFAULT_HEADERS,
             timeout=httpx.Timeout(20.0, connect=10.0),
             follow_redirects=True,
-            limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
+            limits=httpx.Limits(max_connections=64, max_keepalive_connections=32),
         )
     return _client
 

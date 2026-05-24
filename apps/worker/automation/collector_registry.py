@@ -20,15 +20,18 @@ PARALLEL_COLLECTORS: tuple[str, ...] = (
     "collectors/yc_collector.py",
     "collectors/github_signals.py",
     "collectors/techcrunch_edgar_collector.py",
-    "collectors/edgar_collector.py",
     "collectors/esma_mica_collector.py",
     "collectors/x_signal_collector.py",
 )
+# Form D bulk: collectors/edgar_collector.py via WEEKLY_FORM_D_COLLECTORS only
 
 # Full daily parallel batch without Hermes X (use with grok_refresh.py on another cron)
 DAILY_NO_X_PARALLEL_COLLECTORS: tuple[str, ...] = tuple(
     s for s in PARALLEL_COLLECTORS if s != "collectors/x_signal_collector.py"
 )
+
+# SEC Form D quarterly ZIP bulk (heavy SQLite writer). Weekly Hermes cron, not daily.
+WEEKLY_FORM_D_COLLECTORS: tuple[str, ...] = ("collectors/edgar_collector.py",)
 
 # Legacy direct extractors removed (P0-3): funding/big_deals → signal_processor + funding_rollup.
 EXTRACTION_SCRIPTS: tuple[str, ...] = ()
@@ -168,6 +171,7 @@ def registered_collector_script_paths(*, include_gated_daily: bool = True) -> fr
     paths: set[str] = set()
     paths.update(PARALLEL_COLLECTORS)
     paths.update(DAILY_NO_X_PARALLEL_COLLECTORS)
+    paths.update(WEEKLY_FORM_D_COLLECTORS)
     paths.update(FREQUENT_PARALLEL_COLLECTORS)
     paths.update(GROK_COLLECTORS)
     paths.update(CONTINUOUS_COLLECTORS)

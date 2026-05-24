@@ -148,7 +148,7 @@ def ingest_form_d_quarter(
 
 
 def run_form_d_bulk_ingest() -> int:
-    if os.environ.get("EDGAR_FORM_D_BULK", "1").strip().lower() in (
+    if os.environ.get("EDGAR_FORM_D_BULK", "0").strip().lower() in (
         "0",
         "false",
         "no",

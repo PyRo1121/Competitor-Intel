@@ -18,11 +18,12 @@ logger = logging.getLogger("parallel_collect")
 
 
 def _max_parallel() -> int:
-    raw = os.environ.get("CI_PARALLEL_COLLECTORS", "4").strip()
+    """Collector subprocesses; default 3 to limit SQLite writer lock contention."""
+    raw = os.environ.get("CI_PARALLEL_COLLECTORS", "3").strip()
     try:
-        return max(1, min(8, int(raw)))
+        return max(1, min(6, int(raw)))
     except ValueError:
-        return 4
+        return 3
 
 
 _PROFILE_SCRIPTS = {

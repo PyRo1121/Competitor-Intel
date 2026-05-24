@@ -198,7 +198,7 @@ def upsert_company_job_board(
         INSERT INTO company_job_boards
         (
             company_id, ats_platform, board_slug, board_url, is_verified,
-            last_fetched_at, last_job_count,
+            last_fetched_at, last_job_count
         )
         VALUES (?, ?, ?, ?, 1, ?, ?)
         ON CONFLICT(company_id, ats_platform) DO UPDATE SET

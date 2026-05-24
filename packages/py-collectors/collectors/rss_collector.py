@@ -5,6 +5,7 @@ Monitors curated RSS feeds for company mentions and competitive intelligence.
 """
 
 import logging
+import os
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
@@ -16,6 +17,7 @@ logger = logging.getLogger("rss_collector")
 
 from db.connection import get_conn
 from db.ingest import insert_raw_signal_dedup, url_dedup_key
+from db.writer_lock import writer_lock
 from utils.http import close_http_client, fetch_text
 
 from collectors.entity_extract import extract_entities_from_text, text_has_hype
@@ -23,7 +25,12 @@ from collectors.sources_registry import catalog_summary, rss_feed_dicts
 
 VETTED_RSS_FEEDS = rss_feed_dicts()
 
-RSS_FETCH_WORKERS = 8
+def _rss_fetch_workers() -> int:
+    raw = os.environ.get("CI_RSS_FETCH_WORKERS", "20").strip()
+    try:
+        return max(1, min(64, int(raw)))
+    except ValueError:
+        return 20
 RSS_ENTRIES_PER_FEED = 25
 RSS_LOOKBACK_DAYS = 30
 RSS_SUMMARY_MAX = 1200
@@ -212,7 +219,12 @@ def find_company_id(company_name: str, cursor: sqlite3.Cursor) -> int | None:
     return None
 
 
-def store_signal(entry: dict, cursor: sqlite3.Cursor) -> int:
+def store_signal(
+    entry: dict,
+    cursor: sqlite3.Cursor,
+    *,
+    use_writer_lock: bool = True,
+) -> int:
     link = entry.get("link", "")
     if not link:
         return 0
@@ -244,6 +256,7 @@ def store_signal(entry: dict, cursor: sqlite3.Cursor) -> int:
                 company_id=company_id,
                 detected_at=entry["published"],
                 dedup_key=scoped_key,
+                use_writer_lock=use_writer_lock,
             ):
                 stored += 1
     elif entry.get("high_signal") and insert_raw_signal_dedup(
@@ -253,6 +266,7 @@ def store_signal(entry: dict, cursor: sqlite3.Cursor) -> int:
         data,
         detected_at=entry["published"],
         dedup_key=base_key,
+        use_writer_lock=use_writer_lock,
     ):
         stored += 1
     return stored
@@ -277,20 +291,26 @@ def run_rss_collection() -> int:
     conn = get_conn()
     cursor = conn.cursor()
 
-    with ThreadPoolExecutor(max_workers=RSS_FETCH_WORKERS) as pool:
+    parsed: list[tuple[str, list[dict]]] = []
+    workers = _rss_fetch_workers()
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
             pool.submit(fetch_and_parse_feed, feed, company_names): feed
             for feed in VETTED_RSS_FEEDS
         }
         for future in as_completed(futures):
             feed_name, entries = future.result()
+            parsed.append((feed_name, entries))
+            if entries:
+                logger.info("[OK] %s: %s entries", feed_name, len(entries))
+
+    with writer_lock():
+        for _feed_name, entries in parsed:
             for entry in entries:
                 total_entries += 1
                 if entry.get("mentioned_companies"):
                     linked_signals += 1
-                stored_count += store_signal(entry, cursor)
-            if entries:
-                logger.info("[OK] %s: %s entries", feed_name, len(entries))
+                stored_count += store_signal(entry, cursor, use_writer_lock=False)
 
     conn.commit()
     conn.close()

@@ -4,6 +4,7 @@
 
 - **Root:** `~/Documents/Competitor-Intel/`
 - **Execution SSOT:** [docs/EXECUTION_CHECKLIST.md](docs/EXECUTION_CHECKLIST.md) — ordered phases; **update checkboxes** when completing tasks
+- **Linear:** [docs/LINEAR.md](docs/LINEAR.md) — project board (COM), commit format `COM-NNN:`, auto-close via `fixes COM-NNN` on merge to main
 - **Pipeline ops:** [docs/PIPELINE.md](docs/PIPELINE.md) — `make daily-prod`, `make grok-refresh`, `make verify`
 - **Engineering standards:** [docs/ENGINEERING.md](docs/ENGINEERING.md) — production naming, no dead code, shared modules
 - **Operational pipeline:** `packages/py-collectors/`, **`apps/worker/daily_intel.py`** (canonical daily entry; not `automation/daily_intel.py`), SQLite `data/competitor_intel.db`, `integrations/hermes/`
@@ -14,7 +15,7 @@
 - **Doc index:** `docs/README.md`
 - **Hermes integration:** `integrations/hermes/` — HTTP/CLI only, no embedded imports
 
-Legacy Hermes agent copy may exist at `~/.hermes/agents/competitor_intel/`; use `integrations/hermes/call_intel.sh` only.
+Legacy Hermes agent copy may exist at `~/.hermes/agents/competitor_intel/`; use `integrations/hermes/call_intel.py` and `hermes cron` ([docs/SCHEDULING.md](docs/SCHEDULING.md)) only.
 
 Do not refactor Hermes agent boilerplate outside the integration shim unless asked.
 

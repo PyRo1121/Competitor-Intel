@@ -60,7 +60,12 @@ def main() -> int:
     if skip_grok:
         os.environ["CI_AUTO_GROK_X"] = "0"
         os.environ["CI_REQUIRE_GROK_X"] = "0"
+        os.environ.setdefault("EDGAR_FORM_D_BULK", "0")
+        os.environ.setdefault("CI_HN_SKIP_ALGOLIA", "1")
         logger.info("Grok X: skipped (CI_SKIP_GROK_X); use grok_refresh.py on its own cron")
+        logger.info(
+            "SEC Form D bulk: skipped on daily (EDGAR_FORM_D_BULK=0); use edgar_form_d_weekly.py"
+        )
     else:
         os.environ.setdefault("CI_AUTO_GROK_X", "1")
         os.environ.setdefault("CI_REQUIRE_GROK_X", "1")

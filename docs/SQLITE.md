@@ -1,5 +1,7 @@
 # SQLite — enterprise setup (Competitor Intel)
 
+**Research synthesis (Exa + sqlite.org):** [SQLITE_TUNING_RESEARCH.md](SQLITE_TUNING_RESEARCH.md)
+
 Single-file SQLite (`data/competitor_intel.db`) is the production store for this monorepo. With correct tuning it handles **very high read throughput** and **sustained write batches** without Postgres. The limit is **concurrent writers**: SQLite WAL allows many readers + **one writer at a time**.
 
 Implementation SSOT: `packages/py-core/db/`.

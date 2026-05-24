@@ -43,7 +43,8 @@ data/obsidian/Companies/
 
 # Logs
 *.log
-logs/
+logs/*
+!logs/.gitkeep
 
 # IDE / OS
 .vscode/

@@ -44,6 +44,7 @@ External API paths (e.g. `https://api.x.ai/v1`) are unchanged.
 | Script + collector doing same job | Collector module; worker/CLI calls it |
 | Copy-paste SQL | View or helper in `py-core/db` |
 | Parallel doc specs | Link to [PIPELINE.md](PIPELINE.md) / [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md) |
+| Scheduling / health probes | `hermes cron` + Python (`integrations/hermes/cron_*.py`, `apps/cli/healthcheck.py`) — not `.sh` or system crontab |
 
 ---
 
