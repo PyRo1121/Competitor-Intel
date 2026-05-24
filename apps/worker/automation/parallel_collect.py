@@ -8,7 +8,12 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from db.staging import clear_staging_run, merge_staged_run, staging_orchestrated
+from db.staging import (
+    clear_staging_run,
+    list_staging_files,
+    merge_staged_run,
+    staging_orchestrated,
+)
 
 from automation.collector_registry import (
     BASE,
@@ -84,10 +89,19 @@ def run_parallel_collectors(
             if ok:
                 success += 1
 
-    if staging and success == len(targets) and run_id:
+    # Merge whenever staged JSONL exists — do not require all collectors to succeed.
+    # Otherwise successful collectors' data is never written (silent data loss).
+    if staging and run_id and list_staging_files(run_id):
         merge_start = time.perf_counter()
         try:
-            merge_staged_run(run_id)
+            summary = merge_staged_run(run_id)
+            if success < len(targets):
+                logger.warning(
+                    "Staging merge after partial collector success (%s/%s): %s",
+                    success,
+                    len(targets),
+                    summary,
+                )
             keep = os.environ.get("CI_STAGING_KEEP", "").strip().lower() in (
                 "1",
                 "true",
