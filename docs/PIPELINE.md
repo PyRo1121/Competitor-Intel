@@ -1,22 +1,20 @@
-# v1 — Pipeline-first (solo operator)
+# Pipeline operations (solo operator)
 
-**Status:** Active north star · **Supersedes** “build all of Track 6 at once” for day-to-day work.
+**Status:** Active north star · **Product:** [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md) · **Checklist:** [EXECUTION_CHECKLIST.md](EXECUTION_CHECKLIST.md) · **Standards:** [ENGINEERING.md](ENGINEERING.md)
 
-## What v1 is
+## What runs in production
 
 One machine, one SQLite DB, one cron, one daily artifact you trust — then optional Hermes Grok/X on a **separate** cron.
 
-| In v1 | Out of v1 (removed) |
-|-------|---------------------|
-| `make daily-prod` → rollups → `make claims-audit-strict` | REST dashboard / public API (rebuild in v2) |
+| In production | Removed (git history only) |
+|---------------|----------------------------|
+| `make daily-prod` → rollups → `make claims-audit-strict` | REST dashboard / public API |
 | Hermes / `grok_refresh` / `integrations/hermes/` | SQLAlchemy enterprise duplicate stack |
-| `apps/cli` (`intel`, `run_intel`) | Public API auth, WAN deploy (Track 6 Phase D) |
+| `apps/cli` (`intel`, `run_intel`) | Public API auth, WAN deploy |
 | `daily_brief` export | Legacy funding extractors, duplicate RSS walkers |
 | Slim collector set in `collector_registry.py` | |
 
-The read surface and py-enterprise packages were **deleted** (not archived). Restore from git history if needed for v2.
-
-## v1 done checklist
+## Production readiness checklist
 
 Run on **your** prod DB after a normal week:
 
@@ -29,7 +27,7 @@ make claims-audit-strict
 
 **Human bar:** Read today’s brief; spot-check 3 watchlist companies; no duplicate RSS noise; funding claims match sources you’d tweet about.
 
-**7 green dailies in a row** = v1 complete. Only then invest in read UI or tweet automation.
+**7 green dailies in a row** completes checklist **P0**. Only then invest in read UI or tweet automation.
 
 ## Cron (recommended)
 
@@ -59,12 +57,14 @@ On-demand only: `uv run python apps/cli/intel.py <name>` for scripts still in tr
 
 ```bash
 uv sync
-make v1-check    # compile, test-cov, intel-gate, golden-eval, claims-audit-strict
+make verify    # compile, test-cov, intel-gate, golden-eval, claims-audit-strict
 make health-check
 ```
 
 ## Related docs
 
+- [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md) — vision, trust tiers, freemium, dashboard phases
+- [ROADMAP_ENTRYPOINTS.md](ROADMAP_ENTRYPOINTS.md) — scripts → modules; deleted script registry
 - [README.md](README.md) — doc index
 - [SCHEDULING.md](SCHEDULING.md) — cron tiers
 - [integrations/hermes/README.md](../integrations/hermes/README.md) — Hermes entrypoints

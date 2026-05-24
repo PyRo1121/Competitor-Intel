@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v1 bare-metal health — SQLite (+ optional legacy API checks if CI_HEALTH_REQUIRE_API=1).
+# Bare-metal health — SQLite (+ optional legacy API checks if CI_HEALTH_REQUIRE_API=1).
 set -euo pipefail
 
 ROOT="${COMPETITOR_INTEL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"

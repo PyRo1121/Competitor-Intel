@@ -1,4 +1,4 @@
-.PHONY: sync daily frequent grok-refresh full-sweep export-x-queries export-x-queries-enriched compile test lock export-reqs lint lint-py lint-py-fix health-check v1-verify v1-check
+.PHONY: sync daily frequent grok-refresh full-sweep export-x-queries export-x-queries-enriched compile test lock export-reqs lint lint-py lint-py-fix health-check verify verify-dry-run track2-verify
 
 ROOT := $(CURDIR)
 export CI_DB_PATH ?= $(ROOT)/data/competitor_intel.db
@@ -119,13 +119,13 @@ golden-eval:
 export-ingest-catalog:
 	PYTHONPATH=packages/py-collectors uv run python scripts/export_ingest_catalog.py
 
-# v1 operational bar (see docs/V1_PIPELINE.md)
-v1-check: compile test-cov intel-gate golden-eval claims-audit-strict
+# Production verification bar (see docs/PIPELINE.md, docs/ENGINEERING.md)
+verify: compile test-cov intel-gate golden-eval claims-audit-strict
 
-v1-verify: v1-check
+verify-dry-run: verify
 	CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py --dry-run
 
-track2-verify: v1-check
+track2-verify: verify
 
 # --- Lint (Track 3 tooling; CI wiring optional) ---
 PY_LINT_PATHS := packages apps/worker apps/cli tests scripts

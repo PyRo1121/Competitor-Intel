@@ -1,6 +1,6 @@
 # Linting and formatting
 
-Track 3 engineering tooling. **Python only** (v1 pipeline repo): Ruff + ty.
+Track 3 engineering tooling. **Python only:** Ruff + ty.
 
 ## Python — Ruff + ty
 
@@ -39,7 +39,7 @@ ty `environment.root` includes `packages/py-core`, `packages/py-collectors`, plu
 make lint    # alias for lint-py
 ```
 
-**v1 bar:** `make v1-check` = compile + test-cov + intel-gate + golden-eval + claims-audit-strict. CI runs the same Python job (see `.github/workflows/ci.yml`).
+**Production bar:** `make verify` = compile + test-cov + intel-gate + golden-eval + claims-audit-strict. CI runs the same steps (see `.github/workflows/ci.yml`).
 
 ---
 

@@ -1,8 +1,8 @@
 # Competitor Intelligence
 
-Private-company intelligence pipeline: ingest RSS, GitHub, SEC, jobs, and Hermes Grok/X signals; roll up funding claims; export a daily brief from SQLite.
+Private-company intelligence pipeline: multi-source ingest, funding rollups, trust-tiered claims, scored companies—SQLite SSOT; dashboard and Hermes read the same data.
 
-**v1 focus:** pipeline-first for a solo operator. See [docs/V1_PIPELINE.md](docs/V1_PIPELINE.md).
+**Start here:** [docs/EXECUTION_CHECKLIST.md](docs/EXECUTION_CHECKLIST.md) · **Product:** [docs/PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md) · **Ops:** [docs/PIPELINE.md](docs/PIPELINE.md) · **Standards:** [docs/ENGINEERING.md](docs/ENGINEERING.md)
 
 ## Quick start
 
@@ -48,7 +48,8 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | Start here | |
 |------------|--|
-| [docs/V1_PIPELINE.md](docs/V1_PIPELINE.md) | **v1 north star** (active) |
+| [docs/PIPELINE.md](docs/PIPELINE.md) | Daily pipeline, collectors, verification |
+| [docs/ENGINEERING.md](docs/ENGINEERING.md) | Naming, structure, no dead code |
 | [docs/ROADMAP_PRODUCTION.md](docs/ROADMAP_PRODUCTION.md) | Full audit backlog (v2+) |
 | [docs/PIPELINE.md](docs/PIPELINE.md) | Data flow and Makefile |
 | [docs/HANDBOOK.md](docs/HANDBOOK.md) | Schema and operations |

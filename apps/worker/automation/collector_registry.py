@@ -13,7 +13,7 @@ from pathlib import Path
 # Monorepo root (apps/worker/automation → … → Competitor-Intel/)
 BASE = Path(__file__).resolve().parents[3]
 
-# v1 parallel ingest (see docs/V1_PIPELINE.md). X runs on grok_refresh cron, not daily-no-x.
+# Parallel ingest (see docs/PIPELINE.md). X runs on grok_refresh cron, not daily-no-x.
 PARALLEL_COLLECTORS: tuple[str, ...] = (
     "collectors/rss_collector.py",
     "collectors/hackernews_collector.py",
@@ -64,7 +64,7 @@ CONTINUOUS_COLLECTORS: tuple[str, ...] = (
 
 # Post-parallel sequential pipeline (daily_intel.py).
 # Intelligence extraction: signal_processor + funding_rollup (not funding_collector).
-# v1 daily sequential — brief at end; tweet/embed/enrich deferred to v2.
+# Daily sequential — brief at end; tweet/embed/enrich not on daily schedule.
 _DAILY_SEQUENTIAL_BASE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("collectors/website_monitor.py", ()),
     ("collectors/signal_url_fanout.py", ()),
@@ -129,7 +129,7 @@ def get_daily_sequential() -> tuple[tuple[str, tuple[str, ...]], ...]:
     return tuple(out)
 
 
-# intel.py CLI — v1 schedulers + on-demand pipeline/rollup; legacy scripts stay on disk only.
+# intel.py CLI — schedulers + on-demand pipeline/rollup.
 INTEL_CLI_COLLECTORS: dict[str, str] = {
     "rss": "collectors/rss_collector.py",
     "github": "collectors/github_signals.py",

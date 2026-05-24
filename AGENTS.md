@@ -3,16 +3,15 @@
 # Project layout (monorepo)
 
 - **Root:** `~/Documents/Competitor-Intel/`
-- **v1 north star:** [docs/V1_PIPELINE.md](docs/V1_PIPELINE.md) — pipeline-first; `make daily-prod`, `make grok-refresh`, `make v1-check`
+- **Execution SSOT:** [docs/EXECUTION_CHECKLIST.md](docs/EXECUTION_CHECKLIST.md) — ordered phases; **update checkboxes** when completing tasks
+- **Pipeline ops:** [docs/PIPELINE.md](docs/PIPELINE.md) — `make daily-prod`, `make grok-refresh`, `make verify`
+- **Engineering standards:** [docs/ENGINEERING.md](docs/ENGINEERING.md) — production naming, no dead code, shared modules
 - **Operational pipeline:** `packages/py-collectors/`, **`apps/worker/daily_intel.py`** (canonical daily entry; not `automation/daily_intel.py`), SQLite `data/competitor_intel.db`, `integrations/hermes/`
 - **Python toolchain:** `uv sync` from repo root (no pip); workspace packages: `py-core`, `py-collectors` only
 - **Lint/format:** `make lint` → `make lint-py` (Ruff + ty) — see [docs/LINTING.md](docs/LINTING.md)
 - **Env:** `CI_DB_PATH`, `HERMES_AGENT_ROOT`, `CI_SKIP_GROK_X` — see `.env.example`
 - **SQLite SSOT:** `packages/py-core/db/` + [docs/SQLITE.md](docs/SQLITE.md) — always `get_conn()`, WAL, writer lock for parallel collectors
-- **v1 north star:** `docs/V1_PIPELINE.md` · **Doc index:** `docs/README.md`
-- **Handbook:** `docs/HANDBOOK.md`
-- **Pipeline (signals + rollups):** `docs/PIPELINE.md`
-- **New session handoff:** `docs/AGENT_HANDOFF.md`
+- **Doc index:** `docs/README.md`
 - **Hermes integration:** `integrations/hermes/` — HTTP/CLI only, no embedded imports
 
 Legacy Hermes agent copy may exist at `~/.hermes/agents/competitor_intel/`; use `integrations/hermes/call_intel.sh` only.

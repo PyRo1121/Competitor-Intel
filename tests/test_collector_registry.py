@@ -18,17 +18,6 @@ from automation.collector_registry import (  # noqa: E402
     registered_collector_script_paths,
 )
 
-# v1 daily parallel (no X) — keep in sync with docs/V1_PIPELINE.md
-V1_DAILY_PARALLEL_NO_X: tuple[str, ...] = (
-    "collectors/rss_collector.py",
-    "collectors/hackernews_collector.py",
-    "collectors/yc_collector.py",
-    "collectors/github_signals.py",
-    "collectors/techcrunch_edgar_collector.py",
-    "collectors/edgar_collector.py",
-    "collectors/esma_mica_collector.py",
-)
-
 COLLECTORS_ROOT = ROOT / "packages" / "py-collectors" / "collectors"
 _MAIN_RE = re.compile(r'if __name__\s*==\s*["\']__main__["\']')
 
@@ -51,8 +40,10 @@ def test_intel_cli_paths_exist():
     assert not missing, f"INTEL_CLI_COLLECTORS points at missing files: {missing}"
 
 
-def test_v1_daily_parallel_no_x_matches_registry():
-    assert DAILY_NO_X_PARALLEL_COLLECTORS == V1_DAILY_PARALLEL_NO_X
+def test_daily_no_x_parallel_is_parallel_minus_x():
+    assert DAILY_NO_X_PARALLEL_COLLECTORS == tuple(
+        s for s in PARALLEL_COLLECTORS if s != "collectors/x_signal_collector.py"
+    )
 
 
 def test_x_signal_only_on_grok_cron_not_daily_no_x():
@@ -83,8 +74,8 @@ def _resolve_registry_script(path: str) -> Path:
     return ROOT / path
 
 
-def test_v1_scheduled_collector_paths_exist():
-    """v1: every registry path must exist; legacy __main__ scripts may stay off-schedule."""
+def test_scheduled_collector_paths_exist():
+    """Every registry path must exist; legacy __main__ scripts may stay off-schedule."""
     registered = registered_collector_script_paths(include_gated_daily=True)
     missing = [p for p in sorted(registered) if not _resolve_registry_script(p).is_file()]
     assert not missing, f"Registry points at missing files: {missing}"
