@@ -15,7 +15,6 @@ Usage:
     python intel.py signals            Show recent signals
     python intel.py export             Export to JSON/CSV
     python intel.py pipeline           Run full pipeline (collect + report)
-    python intel.py youtube            Run YouTube collector
     python intel.py promote            Run auto-promotion
     python intel.py discover           Harvest company_candidates from signals
     python intel.py rank               Refresh companies.score from attention
@@ -383,58 +382,10 @@ def cmd_pipeline(_args):
     return 0
 
 
-def cmd_youtube(_args):
-    """Run YouTube collector."""
-    logger.info("Running YouTube collector...")
-    success, output = run_script(COLLECTORS["youtube"])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
 def cmd_process(_args):
     """Process unprocessed raw signals into intelligence events."""
     logger.info("Processing unprocessed signals...")
     success, output = run_script(COLLECTORS["process"])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
-def cmd_enrich(args):
-    """Run deep enrichment pipeline."""
-    logger.info("Running deep enrichment pipeline...")
-    script_path = COLLECTORS["enrich"]
-    script_args = []
-    if hasattr(args, "limit") and args.limit:
-        script_args.extend(["--limit", str(args.limit)])
-    if hasattr(args, "profiles") and args.profiles:
-        script_args.append("--profiles")
-
-    success, output = run_script(script_path, script_args)
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
-def cmd_embed(_args):
-    """Generate embeddings for all enriched content."""
-    logger.info("Generating embeddings...")
-    success, output = run_script(COLLECTORS["embed"])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
-def cmd_rerank(args):
-    """Run semantic search with reranking."""
-    query = args.query if hasattr(args, "query") else ""
-    logger.info("Reranked search: %s", query)
-    success, output = run_script(COLLECTORS["rerank"], [query])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
-def cmd_enhanced_funding(_args):
-    """Run enhanced funding/deal detection."""
-    logger.info("Running enhanced funding detection...")
-    success, output = run_script(COLLECTORS["funding_enhanced"])
     logger.info("Output:\n%s", output)
     return 0 if success else 1
 
@@ -468,13 +419,6 @@ def cmd_rank(_args):
     return 0 if success else 1
 
 
-def cmd_producthunt(_args):
-    logger.info("Running Product Hunt collector...")
-    success, output = run_script(COLLECTORS["producthunt"])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
 def cmd_hackernews(_args):
     logger.info("Running Hacker News collector...")
     success, output = run_script(COLLECTORS["hackernews"])
@@ -485,27 +429,6 @@ def cmd_hackernews(_args):
 def cmd_jobs(_args):
     logger.info("Running job tracker...")
     success, output = run_script(COLLECTORS["jobs"])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
-def cmd_techstack(_args):
-    logger.info("Running tech stack detector...")
-    success, output = run_script(COLLECTORS["techstack"])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
-def cmd_crunchbase(_args):
-    logger.info("Running Crunchbase collector...")
-    success, output = run_script(COLLECTORS["crunchbase"])
-    logger.info("Output:\n%s", output)
-    return 0 if success else 1
-
-
-def cmd_angellist(_args):
-    logger.info("Running AngelList collector...")
-    success, output = run_script(COLLECTORS["angellist"])
     logger.info("Output:\n%s", output)
     return 0 if success else 1
 
@@ -525,10 +448,7 @@ Examples:
   python intel.py search "OpenAI"          Search for OpenAI
   python intel.py companies --limit 10     List top 10 companies
   python intel.py pipeline               Full pipeline (collect + report)
-  python intel.py youtube                Run YouTube collector
-  python intel.py enrich                 Run deep enrichment
-  python intel.py embed                  Generate embeddings
-  python intel.py rerank "AI funding"     Semantic search with reranking
+  python intel.py process                Process raw signals
         """,
     )
 
@@ -571,26 +491,8 @@ Examples:
     # pipeline
     subparsers.add_parser("pipeline", help="Run full pipeline")
 
-    # youtube
-    subparsers.add_parser("youtube", help="Run YouTube collector")
-
     # process
     subparsers.add_parser("process", help="Process raw signals into intelligence events")
-
-    # enrich
-    enrich_parser = subparsers.add_parser("enrich", help="Run deep enrichment pipeline")
-    enrich_parser.add_argument("--limit", type=int, default=50, help="Max companies")
-    enrich_parser.add_argument("--profiles", action="store_true", help="Show profiles")
-
-    # embed
-    subparsers.add_parser("embed", help="Generate embeddings for enriched content")
-
-    # rerank
-    rerank_parser = subparsers.add_parser("rerank", help="Semantic search with reranking")
-    rerank_parser.add_argument("query", help="Search query")
-
-    # enhanced-funding
-    subparsers.add_parser("enhanced-funding", help="Run enhanced funding/deal detection")
 
     # sources
     subparsers.add_parser("sources", help="Show all configured RSS sources")
@@ -598,12 +500,8 @@ Examples:
     subparsers.add_parser("promote", help="Run auto-promotion")
     subparsers.add_parser("discover", help="Harvest company_candidates from signals")
     subparsers.add_parser("rank", help="Refresh companies.score from attention")
-    subparsers.add_parser("producthunt", help="Run Product Hunt collector")
     subparsers.add_parser("hackernews", help="Run Hacker News collector")
     subparsers.add_parser("jobs", help="Run job posting tracker")
-    subparsers.add_parser("techstack", help="Run tech stack detector")
-    subparsers.add_parser("crunchbase", help="Run Crunchbase collector")
-    subparsers.add_parser("angellist", help="Run AngelList collector")
 
     args = parser.parse_args()
 
@@ -617,22 +515,13 @@ Examples:
         "signals": cmd_signals,
         "export": cmd_export,
         "pipeline": cmd_pipeline,
-        "youtube": cmd_youtube,
         "process": cmd_process,
-        "enrich": cmd_enrich,
-        "embed": cmd_embed,
-        "rerank": cmd_rerank,
-        "enhanced-funding": cmd_enhanced_funding,
         "sources": cmd_sources,
         "promote": cmd_promote,
         "discover": cmd_discover,
         "rank": cmd_rank,
-        "producthunt": cmd_producthunt,
         "hackernews": cmd_hackernews,
         "jobs": cmd_jobs,
-        "techstack": cmd_techstack,
-        "crunchbase": cmd_crunchbase,
-        "angellist": cmd_angellist,
     }
 
     handler = commands.get(args.command)

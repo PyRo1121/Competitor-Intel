@@ -13,19 +13,15 @@ from pathlib import Path
 # Monorepo root (apps/worker/automation → … → Competitor-Intel/)
 BASE = Path(__file__).resolve().parents[3]
 
-# Ingest → raw_signals (parallel-safe; all migrated to insert_raw_signal_dedup)
+# v1 parallel ingest (see docs/V1_PIPELINE.md). X runs on grok_refresh cron, not daily-no-x.
 PARALLEL_COLLECTORS: tuple[str, ...] = (
     "collectors/rss_collector.py",
+    "collectors/hackernews_collector.py",
+    "collectors/yc_collector.py",
+    "collectors/github_signals.py",
     "collectors/techcrunch_edgar_collector.py",
     "collectors/edgar_collector.py",
-    "collectors/yc_collector.py",
     "collectors/esma_mica_collector.py",
-    "collectors/producthunt_collector.py",
-    "collectors/hackernews_collector.py",
-    "collectors/crunchbase_collector.py",
-    "collectors/angellist_collector.py",
-    "collectors/github_signals.py",
-    "collectors/youtube_collector.py",
     "collectors/x_signal_collector.py",
 )
 
@@ -42,7 +38,6 @@ FREQUENT_PARALLEL_COLLECTORS: tuple[str, ...] = (
     "collectors/rss_collector.py",
     "collectors/hackernews_collector.py",
     "collectors/yc_collector.py",
-    "collectors/producthunt_collector.py",
     "collectors/github_signals.py",
     "collectors/techcrunch_edgar_collector.py",
 )
@@ -69,12 +64,11 @@ CONTINUOUS_COLLECTORS: tuple[str, ...] = (
 
 # Post-parallel sequential pipeline (daily_intel.py).
 # Intelligence extraction: signal_processor + funding_rollup (not funding_collector).
+# v1 daily sequential — brief at end; tweet/embed/enrich deferred to v2.
 _DAILY_SEQUENTIAL_BASE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("collectors/website_monitor.py", ()),
     ("collectors/signal_url_fanout.py", ()),
     ("collectors/job_tracker.py", ()),
-    ("collectors/tech_stack_detector.py", ()),
-    ("collectors/investor_collector.py", ()),
     ("collectors/signal_processor.py", ()),
     ("collectors/signal_repair.py", ()),
     ("collectors/intel_quality_gate.py", ()),
@@ -82,13 +76,7 @@ _DAILY_SEQUENTIAL_BASE: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("collectors/auto_promote.py", ()),
     ("collectors/company_ranker.py", ()),
     ("collectors/funding_rollup.py", ()),
-    ("collectors/competitor_mapper.py", ()),
-    ("collectors/momentum_detector.py", ()),
-    ("collectors/enrichment/enrichment_runner.py", ()),
-    ("collectors/enrichment/embedding_generator.py", ()),
-    ("packages/py-core/alerts/alert_engine.py", ()),
     ("apps/worker/daily_brief.py", ("--export",)),
-    ("apps/worker/tweet_generator.py", ()),
 )
 
 # Back-compat import name (without CI_COMPANY_DATA_ROLLUP gate).
@@ -141,9 +129,8 @@ def get_daily_sequential() -> tuple[tuple[str, tuple[str, ...]], ...]:
     return tuple(out)
 
 
-# intel.py CLI name → script path (on-demand; not all run on daily schedule)
+# intel.py CLI — v1 schedulers + on-demand pipeline/rollup; legacy scripts stay on disk only.
 INTEL_CLI_COLLECTORS: dict[str, str] = {
-    # Ingest (parallel / frequent)
     "rss": "collectors/rss_collector.py",
     "github": "collectors/github_signals.py",
     "website": "collectors/website_monitor.py",
@@ -151,21 +138,8 @@ INTEL_CLI_COLLECTORS: dict[str, str] = {
     "yc": "collectors/yc_collector.py",
     "esma_mica": "collectors/esma_mica_collector.py",
     "techcrunch": "collectors/techcrunch_edgar_collector.py",
-    "multi": "collectors/multi_source_collector.py",
-    "enhanced_signals": "collectors/enhanced_signal_collector.py",
-    "youtube": "collectors/youtube_collector.py",
-    "producthunt": "collectors/producthunt_collector.py",
     "hackernews": "collectors/hackernews_collector.py",
-    "crunchbase": "collectors/crunchbase_collector.py",
-    "angellist": "collectors/angellist_collector.py",
     "x": "collectors/x_signal_collector.py",
-    "continuous": "collectors/continuous_ingest.py",
-    # Legacy extractors (P0-3: daily uses signal_processor + funding_rollup)
-    "funding": "collectors/funding_collector.py",
-    "deals": "collectors/big_deals_collector.py",
-    "funding_enhanced": "collectors/enhanced_funding_detector.py",
-    "funding_rumor": "collectors/funding_rumor_detector.py",
-    # Pipeline / quality
     "fanout": "collectors/signal_url_fanout.py",
     "process": "collectors/signal_processor.py",
     "repair": "collectors/signal_repair.py",
@@ -175,26 +149,11 @@ INTEL_CLI_COLLECTORS: dict[str, str] = {
     "regulatory_licenses": "collectors/regulatory_license_rollup.py",
     "cap_table": "collectors/cap_table_rollup.py",
     "job_rollup": "collectors/job_rollup.py",
-    # Discovery / rank
     "discover": "collectors/candidate_discovery.py",
     "company_discovery": "collectors/company_discovery.py",
     "promote": "collectors/auto_promote.py",
     "rank": "collectors/company_ranker.py",
-    "competitor": "collectors/competitor_mapper.py",
-    "momentum": "collectors/momentum_detector.py",
-    "reactive": "collectors/reactive_enrichment.py",
-    # Jobs / stack / investors
     "jobs": "collectors/job_tracker.py",
-    "techstack": "collectors/tech_stack_detector.py",
-    "investors": "collectors/investor_collector.py",
-    "github_org": "collectors/github_collector.py",
-    # Enrichment (also in daily sequential when enabled)
-    "enrich": "collectors/enrichment/enrichment_runner.py",
-    "embed": "collectors/enrichment/embedding_generator.py",
-    "rerank": "collectors/enrichment/reranker.py",
-    "github_deep": "collectors/enrichment/github_deep.py",
-    "company_enrich": "collectors/enrichment/company_enricher.py",
-    "funding_enrich": "collectors/enrichment/funding_enricher.py",
 }
 
 

@@ -10,10 +10,23 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "apps" / "worker"))
 
 from automation.collector_registry import (  # noqa: E402
+    DAILY_NO_X_PARALLEL_COLLECTORS,
+    GROK_COLLECTORS,
     INTEL_CLI_COLLECTORS,
     PARALLEL_COLLECTORS,
     _company_data_rollup_enabled,
     registered_collector_script_paths,
+)
+
+# v1 daily parallel (no X) — keep in sync with docs/V1_PIPELINE.md
+V1_DAILY_PARALLEL_NO_X: tuple[str, ...] = (
+    "collectors/rss_collector.py",
+    "collectors/hackernews_collector.py",
+    "collectors/yc_collector.py",
+    "collectors/github_signals.py",
+    "collectors/techcrunch_edgar_collector.py",
+    "collectors/edgar_collector.py",
+    "collectors/esma_mica_collector.py",
 )
 
 COLLECTORS_ROOT = ROOT / "packages" / "py-collectors" / "collectors"
@@ -38,6 +51,16 @@ def test_intel_cli_paths_exist():
     assert not missing, f"INTEL_CLI_COLLECTORS points at missing files: {missing}"
 
 
+def test_v1_daily_parallel_no_x_matches_registry():
+    assert DAILY_NO_X_PARALLEL_COLLECTORS == V1_DAILY_PARALLEL_NO_X
+
+
+def test_x_signal_only_on_grok_cron_not_daily_no_x():
+    assert "collectors/x_signal_collector.py" in PARALLEL_COLLECTORS
+    assert "collectors/x_signal_collector.py" not in DAILY_NO_X_PARALLEL_COLLECTORS
+    assert GROK_COLLECTORS == ("collectors/x_signal_collector.py",)
+
+
 def test_parallel_collectors_single_rss_walker():
     rss = [p for p in PARALLEL_COLLECTORS if "rss" in p or "multi_source" in p]
     assert rss == ["collectors/rss_collector.py"]
@@ -54,10 +77,14 @@ def test_company_data_rollup_opt_out(monkeypatch):
     assert _company_data_rollup_enabled() is False
 
 
-def test_every_collector_entrypoint_is_registered():
+def _resolve_registry_script(path: str) -> Path:
+    if path.startswith("collectors/"):
+        return ROOT / "packages" / "py-collectors" / path
+    return ROOT / path
+
+
+def test_v1_scheduled_collector_paths_exist():
+    """v1: every registry path must exist; legacy __main__ scripts may stay off-schedule."""
     registered = registered_collector_script_paths(include_gated_daily=True)
-    entrypoints = _collector_entrypoint_paths()
-    unregistered = sorted(entrypoints - registered)
-    assert not unregistered, (
-        "Add to collector_registry (schedule or INTEL_CLI_COLLECTORS): " + ", ".join(unregistered)
-    )
+    missing = [p for p in sorted(registered) if not _resolve_registry_script(p).is_file()]
+    assert not missing, f"Registry points at missing files: {missing}"

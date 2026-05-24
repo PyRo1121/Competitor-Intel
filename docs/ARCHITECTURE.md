@@ -7,14 +7,11 @@ Canonical repo: `~/Documents/Competitor-Intel/`. Implementation plan: [ROADMAP.m
 ```
 Competitor-Intel/
 ├── apps/
-│   ├── api/                 # Bun + Hono REST API (read-mostly)
-│   ├── dashboard/           # Svelte 5 + Vite
 │   ├── worker/              # daily_intel.py, frequent_intel.py, reports
 │   └── cli/                 # intel.py, run_intel.py
 ├── packages/
 │   ├── py-core/             # db, utils, alerts, ci_paths
-│   ├── py-collectors/       # collectors/ (operational ingest)
-│   └── py-enterprise/       # SQLAlchemy package — frozen until Track 4 (ROADMAP P4-2)
+│   └── py-collectors/       # collectors/ (operational ingest)
 ├── integrations/hermes/     # call_intel.sh — only Hermes entry
 ├── scripts/                 # enrich export/apply, golden eval, Grok helpers
 ├── infra/scripts/           # dedupe, migrations
@@ -27,15 +24,12 @@ Competitor-Intel/
 
 | Stack | Tool |
 |-------|------|
-| Python | `uv sync` — workspace: py-core, py-collectors, py-enterprise |
-| API | Bun — `apps/api` |
-| Dashboard | Bun — `apps/dashboard` |
+| Python | `uv sync` — workspace: py-core, py-collectors |
 
 ```bash
 uv run python apps/worker/daily_intel.py
 uv run python apps/cli/run_intel.py
-cd apps/api && bun run dev
-cd apps/dashboard && bun run dev
+make cli ARGS="status"
 ```
 
 Path resolution: `packages/py-core/ci_paths.py` (`CI_DB_PATH` overrides DB file).
@@ -51,13 +45,6 @@ run_intel.py → apps/cli/run_intel.py
 
 Remove symlinks when `collector_registry.py` uses only monorepo-native paths (ROADMAP X-13).
 
-## Dual stack
-
-| Layer | Path | Status |
-|-------|------|--------|
-| **Operational** | `packages/py-collectors`, `apps/worker` | Production daily pipeline |
-| **Enterprise** | `packages/py-enterprise` | Optional CLI; **not** in daily — do not wire without ROADMAP decision |
-
 **Canonical daily entry:** `apps/worker/daily_intel.py` only. Do **not** use `apps/worker/automation/daily_intel.py` (removed — was a stale duplicate).
 
 ## Data flow
@@ -67,7 +54,7 @@ Sources (RSS, GitHub, SEC, X via Grok, jobs, …)
   → raw_signals (dedup via insert_raw_signal_dedup)
   → signal_processor → intelligence_events
   → rollups (funding_rounds, job_postings, profile claims)
-  → API + dashboard
+  → CLI brief export (`apps/worker/daily_brief.py`, `apps/cli/intel.py`)
 ```
 
 Layer rules and defect backlog: [PIPELINE.md](PIPELINE.md), [ROADMAP.md](ROADMAP.md).

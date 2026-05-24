@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bare-metal health checks for Competitor Intel (P3-7 — no Docker).
+# v1 bare-metal health — SQLite (+ optional legacy API checks if CI_HEALTH_REQUIRE_API=1).
 set -euo pipefail
 
 ROOT="${COMPETITOR_INTEL_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -7,6 +7,7 @@ API_URL="${CI_API_URL:-http://127.0.0.1:3000}"
 DASHBOARD_URL="${CI_DASHBOARD_URL:-}"
 DB_PATH="${CI_DB_PATH:-$ROOT/data/competitor_intel.db}"
 API_TIMEOUT_SEC="${CI_HEALTH_API_TIMEOUT_SEC:-30}"
+REQUIRE_API="${CI_HEALTH_REQUIRE_API:-0}"
 FAIL=0
 
 check() {
@@ -22,26 +23,30 @@ check() {
 
 check "sqlite db exists" test -f "$DB_PATH"
 check "sqlite db readable" sqlite3 "$DB_PATH" "SELECT 1;" >/dev/null
-check "api /health" bash -c "
+check "sqlite companies table" sqlite3 "$DB_PATH" "SELECT 1 FROM companies LIMIT 1;" >/dev/null
+
+if [[ "$REQUIRE_API" == "1" ]]; then
+  check "api /health" bash -c "
 curl -sf --max-time ${API_TIMEOUT_SEC} '${API_URL}/health' | python3 -c \"
 import json, sys
 d = json.load(sys.stdin)
 assert d.get('status') == 'ok' or d.get('ok') is True, d
 \"
 "
-check "api /api/status" bash -c "
+  check "api /api/status" bash -c "
 curl -sf --max-time ${API_TIMEOUT_SEC} '${API_URL}/api/status' | python3 -c \"
 import json, sys
 d = json.load(sys.stdin)
 assert 'queriedAt' in d and isinstance(d.get('counts'), dict), d
 \"
 "
+fi
 
 if [[ -n "$DASHBOARD_URL" ]]; then
   check "dashboard reachable" curl -sf --max-time "${API_TIMEOUT_SEC}" -o /dev/null "$DASHBOARD_URL"
 fi
 
-if [[ -n "${CI_HEALTH_FRESHNESS_MAX_HOURS:-}" ]]; then
+if [[ -n "${CI_HEALTH_FRESHNESS_MAX_HOURS:-}" && "$REQUIRE_API" == "1" ]]; then
   check "api signal freshness (<=${CI_HEALTH_FRESHNESS_MAX_HOURS}h)" bash -c "
 curl -sf --max-time ${API_TIMEOUT_SEC} '${API_URL}/api/status' | python3 -c \"
 import json, sys

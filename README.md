@@ -1,6 +1,8 @@
 # Competitor Intelligence
 
-Private-company intelligence platform: ingest RSS, GitHub, SEC, jobs, and Grok/X signals; roll up funding and hiring claims; expose a REST API and Svelte dossier for due diligence.
+Private-company intelligence pipeline: ingest RSS, GitHub, SEC, jobs, and Hermes Grok/X signals; roll up funding claims; export a daily brief from SQLite.
+
+**v1 focus:** pipeline-first for a solo operator. See [docs/V1_PIPELINE.md](docs/V1_PIPELINE.md).
 
 ## Quick start
 
@@ -9,23 +11,24 @@ cd ~/Documents/Competitor-Intel
 uv sync
 export CI_DB_PATH="$PWD/data/competitor_intel.db"
 
-make full-sweep         # on-demand: daily first, then enriched X search + ingest
-make daily              # scheduled full pipeline (X fetch only if batch stale)
-make intel-gate         # signal quality gate
-make api-dev            # API :3000
-make dashboard-dev      # UI :5173
+make daily-prod          # production cron: strict funding + dedup, no inline Grok
+make grok-refresh        # Hermes X batch (separate cron, ~5×/day)
+make rollup-all          # company / funding / job rollups when not inlined in daily
+make claims-audit-strict
+make health-check        # SQLite checks
 ```
 
 Hermes: `integrations/hermes/call_intel.sh daily` (see [integrations/hermes/README.md](integrations/hermes/README.md)).
+
+CLI: `make cli ARGS="status"` or `uv run python apps/cli/intel.py daily --export`.
 
 ## Toolchain
 
 | Layer | Stack |
 |-------|--------|
 | Collectors / worker | Python 3.12+ via **uv** |
-| API | **Bun** + Hono |
-| Dashboard | **Bun** + Svelte 5 |
 | Database | SQLite (`data/competitor_intel.db`, override `CI_DB_PATH`) |
+| Hermes | External agent + `integrations/hermes/` (required for Grok/X) |
 
 ## Monorepo
 
@@ -33,10 +36,9 @@ Hermes: `integrations/hermes/call_intel.sh daily` (see [integrations/hermes/READ
 |------|------|
 | `packages/py-collectors` | Collectors |
 | `packages/py-core` | DB, ingest, alerts |
-| `packages/py-enterprise` | SQLAlchemy (frozen — not in daily) |
 | `apps/worker` | `daily_intel.py`, automation |
-| `apps/api`, `apps/dashboard` | Read surface |
 | `apps/cli` | `intel.py`, `run_intel.py` |
+| `integrations/hermes/` | Hermes HTTP/CLI shim |
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -46,13 +48,7 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | Start here | |
 |------------|--|
-| [docs/ROADMAP.md](docs/ROADMAP.md) | What to build (single source of truth) |
+| [docs/V1_PIPELINE.md](docs/V1_PIPELINE.md) | **v1 north star** (active) |
+| [docs/ROADMAP_PRODUCTION.md](docs/ROADMAP_PRODUCTION.md) | Full audit backlog (v2+) |
 | [docs/PIPELINE.md](docs/PIPELINE.md) | Data flow and Makefile |
 | [docs/HANDBOOK.md](docs/HANDBOOK.md) | Schema and operations |
-
-## Bare-metal health (API must be running)
-
-```bash
-make api-dev          # terminal 1
-make health-check     # terminal 2 — SQLite + /health + /api/status
-```

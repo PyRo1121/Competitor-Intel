@@ -6,12 +6,11 @@ Paste this when starting a new session in `~/Documents/Competitor-Intel`.
 
 | Doc | Role |
 |-----|------|
-| [ROADMAP.md](ROADMAP.md) | **What to build** — tracks, backlog IDs, progress log |
+| [V1_PIPELINE.md](V1_PIPELINE.md) | **Active north star** — pipeline-first solo operator |
+| [ROADMAP.md](ROADMAP.md) | What to build — tracks, backlog IDs |
 | [PIPELINE.md](PIPELINE.md) | How data flows, commands |
 | [HANDBOOK.md](HANDBOOK.md) | Schema, feeds, conventions |
-| [README.md](README.md) | Doc index |
-
-Evidence: [audit-file-by-file-2026-05-19.md](audit-file-by-file-2026-05-19.md).
+| [README.md](../README.md) | Doc index |
 
 ## Workspace
 
@@ -20,15 +19,18 @@ Evidence: [audit-file-by-file-2026-05-19.md](audit-file-by-file-2026-05-19.md).
 
 ## Product
 
-Private-company intel: collectors → SQLite → rollups → Bun API → Svelte dashboard. Hermes is a **consumer** via `integrations/hermes/call_intel.sh`, not the codebase host.
+Private-company intel: collectors → SQLite → rollups → CLI brief export. Hermes is a **consumer** via `integrations/hermes/call_intel.sh`, not the codebase host.
+
+Bun API, Svelte dashboard, and `py-enterprise` were **removed** (v1 pipeline-only). See git history for v2 read-surface restore.
 
 ## Entrypoints
 
 ```bash
 export CI_DB_PATH="$PWD/data/competitor_intel.db"
-make daily                                    # apps/worker/daily_intel.py
-make intel-all                                # repair + gate + tests
+make daily-prod                               # apps/worker/daily_intel.py (strict)
+make grok-refresh                             # X batch (separate cron)
 integrations/hermes/call_intel.sh daily       # same pipeline from Hermes
+make cli ARGS="status"                        # apps/cli/intel.py
 ```
 
 ## Layout
@@ -40,15 +42,13 @@ integrations/hermes/call_intel.sh daily       # same pipeline from Hermes
 | `apps/worker/daily_intel.py` | **Only** daily orchestrator |
 | `apps/worker/automation/` | `collector_registry.py`, `parallel_collect.py` |
 | `apps/cli/` | `intel.py`, `run_intel.py` |
-| `apps/api/`, `apps/dashboard/` | Bun apps |
 | `data/competitor_intel.db` | Production DB (`CI_DB_PATH`) |
 
 Root symlinks: `collectors`, `automation`, `intel.py`, `run_intel.py` — legacy subprocess paths.
 
 ## Toolchain
 
-- Python: `uv sync` only (no pip)
-- JS: Bun in `apps/api` and `apps/dashboard`
+- Python: `uv sync` only (no pip); workspace: `py-core`, `py-collectors`
 
 ## Conventions
 
@@ -62,17 +62,15 @@ Root symlinks: `collectors`, `automation`, `intel.py`, `run_intel.py` — legacy
 ```bash
 uv sync
 export CI_DB_PATH="$PWD/data/competitor_intel.db"
-make compile
-make test
-make intel-gate
+make v1-check
 ```
 
 ## Current priority
 
-**Track 0** in [ROADMAP.md](ROADMAP.md): pipeline fail-fast, dedup, single funding→events path, API safety. Do not start Track 2 UI polish before Track 0.
+**v1** in [V1_PIPELINE.md](V1_PIPELINE.md): green `make daily-prod` week, then optional v2 read UI from git history.
 
 ## Out of scope unless asked
 
-- Enterprise package in daily (`py-enterprise` frozen)
 - Commits under `~/.hermes/`
 - New top-level markdown plans (update ROADMAP instead)
+- Restoring deleted API/dashboard without explicit ask

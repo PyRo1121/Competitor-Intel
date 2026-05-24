@@ -106,24 +106,6 @@ def main() -> int:
             log_timings(logger, timings)
             return 1
 
-    if os.environ.get("CI_ENTERPRISE_RSS", "").strip().lower() in ("1", "true", "yes"):
-        logger.warning(
-            "CI_ENTERPRISE_RSS=1: shadow enterprise RSS (operational rss_collector "
-            "already ran). See docs/PIPELINE.md"
-        )
-        ok, elapsed = run_script(
-            "automation/enterprise_collect.py",
-            logger=logger,
-            step_id="enterprise_collect",
-        )
-        timings.append(("enterprise_collect.py", elapsed))
-        total_steps += 1
-        if ok:
-            success += 1
-        elif _abort_unless_force("enterprise_collect.py", ok, args.force):
-            log_timings(logger, timings)
-            return 1
-
     total_elapsed = time.perf_counter() - pipeline_start
     logger.info("Pipeline wall time: %.1fs", total_elapsed)
     log_timings(logger, timings)

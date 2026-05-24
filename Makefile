@@ -1,4 +1,4 @@
-.PHONY: sync daily frequent grok-refresh full-sweep export-x-queries export-x-queries-enriched api-dev dashboard-dev compile test lock export-reqs lint lint-py lint-py-fix lint-js lint-js-fix health-check track3-verify
+.PHONY: sync daily frequent grok-refresh full-sweep export-x-queries export-x-queries-enriched compile test lock export-reqs lint lint-py lint-py-fix health-check v1-verify v1-check
 
 ROOT := $(CURDIR)
 export CI_DB_PATH ?= $(ROOT)/data/competitor_intel.db
@@ -22,13 +22,7 @@ supply-chain-py: lock-check
 		--ignore-vuln PYSEC-2026-102 \
 		--ignore-vuln PYSEC-2026-101
 
-supply-chain-api:
-	cd apps/api && bun install --frozen-lockfile && bun audit
-
-supply-chain-dashboard:
-	cd apps/dashboard && bun install --frozen-lockfile && bun audit
-
-supply-chain: supply-chain-py supply-chain-api supply-chain-dashboard
+supply-chain: supply-chain-py
 
 # Phase A: tiered daily (no inline Grok — use `make grok-refresh` on its cron)
 daily:
@@ -72,29 +66,6 @@ intel:
 cli:
 	uv run python apps/cli/intel.py $(ARGS)
 
-api-dev:
-	cd apps/api && bun run dev
-
-api-build:
-	cd apps/api && bun run build
-
-dashboard-dev:
-	cd apps/dashboard && bun run dev
-
-dashboard-check:
-	cd apps/dashboard && bun run check
-
-dashboard-test:
-	cd apps/dashboard && bun run test:unit
-
-seed-ci-e2e:
-	@test -n "$(CI_DB_PATH)" || export CI_DB_PATH="$(CURDIR)/data/ci_test.db"; \
-	PYTHONPATH=packages/py-core uv run python scripts/migrate_ci_db.py; \
-	PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/seed_ci_e2e.py
-
-dashboard-e2e: test-api seed-ci-e2e
-	cd apps/dashboard && CI=true bun run test:e2e
-
 compile:
 	uv run python -m compileall -q packages apps/worker apps/cli tests
 
@@ -102,7 +73,7 @@ test:
 	uv run pytest -q
 
 test-cov:
-	PYTHONPATH=packages/py-core:packages/py-collectors uv run pytest tests/ -m "not enterprise" \
+	PYTHONPATH=packages/py-core:packages/py-collectors uv run pytest tests/ \
 		--cov=db.migrations --cov=db.connection \
 		--cov=collectors.signal_processor \
 		--cov=collectors.signal_company_resolver \
@@ -145,17 +116,16 @@ phase-a-gate: intel-gate
 golden-eval:
 	PYTHONPATH=packages/py-collectors uv run python scripts/eval_golden_set.py
 
-test-api:
-	@test -n "$(CI_DB_PATH)" || export CI_DB_PATH="$(CURDIR)/data/ci_test.db"; \
-	CI_SQLITE_BUSY_TIMEOUT_MS=60000 PYTHONPATH=packages/py-core uv run python scripts/migrate_ci_db.py; \
-	cd apps/api && CI_DB_PATH="$$CI_DB_PATH" bun test
-
 export-ingest-catalog:
 	PYTHONPATH=packages/py-collectors uv run python scripts/export_ingest_catalog.py
 
-enterprise-check: compile test-cov intel-gate golden-eval test-api dashboard-check
+# v1 operational bar (see docs/V1_PIPELINE.md)
+v1-check: compile test-cov intel-gate golden-eval claims-audit-strict
 
-track2-verify: enterprise-check claims-audit-strict
+v1-verify: v1-check
+	CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py --dry-run
+
+track2-verify: v1-check
 
 # --- Lint (Track 3 tooling; CI wiring optional) ---
 PY_LINT_PATHS := packages apps/worker apps/cli tests scripts
@@ -169,21 +139,13 @@ lint-py-fix:
 	uv run ruff check --fix $(PY_LINT_PATHS)
 	uv run ruff format $(PY_LINT_PATHS)
 
-lint-js:
-	bun run fmt:check
-	bun run lint:js
+lint: lint-py
 
-lint-js-fix:
-	bun run fmt
-	bun run lint:js:fix
-
-lint: lint-py lint-js dashboard-check
-
-# Bare-metal ops health (P3-7 — API must be listening on CI_API_URL).
+# Bare-metal ops health (SQLite; optional CI_HEALTH_REQUIRE_API=1 for legacy API URL).
 health-check:
 	bash scripts/healthcheck.sh
 
-track3-verify: lint test-cov golden-eval test-api
+track3-verify: lint test-cov golden-eval
 
 intel-all: intel-repair intel-gate test-cov golden-eval
 
@@ -264,16 +226,6 @@ claims-audit:
 
 claims-audit-strict:
 	CI_CLAIMS_AUDIT_STRICT=1 CI_DB_PATH="$(CI_DB_PATH)" PYTHONPATH=packages/py-core:packages/py-collectors uv run python scripts/claims_audit.py
-
-# Shadow SQLAlchemy RSS (operational rss_collector is canonical). Dry-run by default.
-enterprise-rss:
-	PYTHONPATH=packages/py-core:packages/py-collectors:packages/py-enterprise/src \
-	uv run python apps/worker/automation/enterprise_collect.py --dry-run
-
-enterprise-rss-live:
-	@echo "Requires CI_DB_PATH on a copy or CI_ENTERPRISE_ALLOW_PROD=1 (see docs/ENTERPRISE_FREEZE.md)"
-	PYTHONPATH=packages/py-core:packages/py-collectors:packages/py-enterprise/src \
-	uv run python apps/worker/automation/enterprise_collect.py
 
 daily-deep:
 	CI_SKIP_GROK_X=1 uv run python apps/worker/daily_intel.py

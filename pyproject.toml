@@ -1,14 +1,13 @@
 [project]
 name = "competitor-intel-workspace"
 version = "2.1.0"
-description = "Competitive intelligence monorepo — collectors, API, dashboard, workers"
+description = "Competitive intelligence monorepo — collectors, worker, CLI"
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
 dependencies = [
     "competitor-intel-core",
     "competitor-intel-collectors",
-    "competitor-intel",
 ]
 
 [dependency-groups]
@@ -31,13 +30,11 @@ package = false
 members = [
     "packages/py-core",
     "packages/py-collectors",
-    "packages/py-enterprise",
 ]
 
 [tool.uv.sources]
 competitor-intel-core = { workspace = true }
 competitor-intel-collectors = { workspace = true }
-competitor-intel = { workspace = true }
 
 [tool.ruff]
 target-version = "py311"
@@ -67,7 +64,6 @@ python-version = "3.12"
 root = [
     "packages/py-core",
     "packages/py-collectors",
-    "packages/py-enterprise",
     "apps/worker",
     "apps/cli",
     "tests",
@@ -95,11 +91,9 @@ possibly-unresolved-reference = "warn"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not enterprise'"
 asyncio_mode = "auto"
 markers = [
     "operational: SQLite daily pipeline (default in make test)",
-    "enterprise: SQLAlchemy enterprise package (optional; make test-all)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:competitor_intel",

@@ -3,16 +3,16 @@
 # Project layout (monorepo)
 
 - **Root:** `~/Documents/Competitor-Intel/`
-- **Operational pipeline:** `packages/py-collectors/`, **`apps/worker/daily_intel.py`** (canonical daily entry; not `automation/daily_intel.py`), SQLite `data/competitor_intel.db`
-- **API env (mutations):** `CI_API_KEY` (required for POST/DELETE), `CI_API_CORS_ORIGINS` (comma-separated; default localhost dashboard ports), `CI_DB_PATH`
-- **Python toolchain:** `uv sync` from repo root (no pip)
-- **Lint/format:** `make lint` (Ruff + ty + Oxfmt + Oxlint + dashboard check) — see [docs/LINTING.md](docs/LINTING.md)
+- **v1 north star:** [docs/V1_PIPELINE.md](docs/V1_PIPELINE.md) — pipeline-first; `make daily-prod`, `make grok-refresh`, `make v1-check`
+- **Operational pipeline:** `packages/py-collectors/`, **`apps/worker/daily_intel.py`** (canonical daily entry; not `automation/daily_intel.py`), SQLite `data/competitor_intel.db`, `integrations/hermes/`
+- **Python toolchain:** `uv sync` from repo root (no pip); workspace packages: `py-core`, `py-collectors` only
+- **Lint/format:** `make lint` → `make lint-py` (Ruff + ty) — see [docs/LINTING.md](docs/LINTING.md)
+- **Env:** `CI_DB_PATH`, `HERMES_AGENT_ROOT`, `CI_SKIP_GROK_X` — see `.env.example`
 - **SQLite SSOT:** `packages/py-core/db/` + [docs/SQLITE.md](docs/SQLITE.md) — always `get_conn()`, WAL, writer lock for parallel collectors
 - **Roadmap (SSOT — what to build):** `docs/ROADMAP.md` · **Doc index:** `docs/README.md`
 - **Handbook:** `docs/HANDBOOK.md`
 - **Pipeline (signals + rollups):** `docs/PIPELINE.md`
 - **New session handoff:** `docs/AGENT_HANDOFF.md`
-- **Dashboard/API:** `apps/dashboard/`, `apps/api/`
 - **Hermes integration:** `integrations/hermes/` — HTTP/CLI only, no embedded imports
 
 Legacy Hermes agent copy remains at `~/.hermes/agents/competitor_intel/` (see `MIGRATED.md`); do not edit unless migrating stragglers.

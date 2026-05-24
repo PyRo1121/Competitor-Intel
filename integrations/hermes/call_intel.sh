@@ -5,7 +5,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MONOREPO="${COMPETITOR_INTEL_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
-API_URL="${CI_API_URL:-http://localhost:3000}"
 export CI_DB_PATH="${CI_DB_PATH:-$MONOREPO/data/competitor_intel.db}"
 
 # Hermes / Grok X paths are opt-in. Set CI_DISABLE_HERMES=1 or CI_SKIP_GROK_X=1 in CI.
@@ -25,7 +24,7 @@ run_monorepo() {
 
 case "$mode" in
   status)
-    curl -sf "$API_URL/api/status" | jq .
+    run_monorepo python apps/cli/intel.py status
     ;;
   daily)
     CI_SKIP_GROK_X=1 run_monorepo python apps/worker/daily_intel.py
@@ -58,7 +57,7 @@ case "$mode" in
     run_monorepo python apps/cli/intel.py "${@:2}"
     ;;
   companies)
-    curl -sf "$API_URL/api/companies?limit=${2:-20}" | jq .
+    run_monorepo python apps/cli/intel.py companies --limit "${2:-20}"
     ;;
   grok-x|grok-ingest)
     if _hermes_disabled; then
@@ -98,7 +97,8 @@ case "$mode" in
     echo "  grok-x           — ingest Grok X JSON (see ingest_grok_x.py --help)" >&2
     echo "  export-x-queries — write PROMPT_X.md + query list for Hermes" >&2
     echo "  cli              — intel.py subcommands" >&2
-    echo "  status           — API health (requires apps/api on CI_API_URL)" >&2
+    echo "  status           — DB counts via apps/cli/intel.py status" >&2
+    echo "  companies        — top companies via apps/cli/intel.py companies" >&2
     exit 1
     ;;
 esac
